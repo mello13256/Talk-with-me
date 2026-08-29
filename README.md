@@ -271,6 +271,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `NODE_ENV` | `development` | `production` liga HSTS e cookies `Secure`. |
 | `TRUST_PROXY` | `0` | Nº de proxies à frente. Render/Railway/Fly = `1`. **Sem isso o rate limit vê o IP do proxy, não o do visitante.** |
 | `DATABASE_SSL` | `false` | `true` em provedores gerenciados (Neon, Supabase, Railway, Render). |
+| `DATABASE_POOL_MAX` | `10` | Reduza para `5` em bancos com poucas conexões, como o plano free do Supabase. |
 | `ALLOW_PUBLIC_REGISTRATION` | `true` | `false` deixa o cadastro apenas por convite do administrador. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | vazio | Cria o administrador no primeiro boot, **apenas se não existir nenhum**. Remova `ADMIN_PASSWORD` depois de entrar. Veja a [seção 6](#6-criando-a-conta-de-administrador). |
 | `CORS_ORIGINS` | vazio | Deixe vazio se API e frontend estiverem no mesmo domínio (recomendado). |
@@ -482,6 +483,68 @@ fly ssh console -C "npm run seed:admin -- --email voce@exemplo.com --name 'Seu N
 ```
 
 `min_machines_running = 1` no `fly.toml` é intencional: WebSocket precisa de uma máquina acordada.
+
+### Opção B2 — Supabase como banco (reduz o custo pela metade)
+
+O Supabase **é** PostgreSQL, então basta apontar `DATABASE_URL` para lá — nada no
+código muda. Combinado com um web service no Render, o custo cai de ~US$ 14 para
+~US$ 7/mês, porque o banco passa a ser gratuito.
+
+**1. Crie o projeto** em [supabase.com](https://supabase.com) e vá em
+**Project Settings → Database → Connection string**.
+
+**2. Escolha a string certa — este é o detalhe que quebra deploys.** O Supabase
+oferece três, e elas não são intercambiáveis:
+
+| Opção | Porta | Serve? |
+| --- | --- | --- |
+| **Session pooler** | 5432 (host `...pooler.supabase.com`) | ✅ **Recomendada.** Funciona por IPv4 e mantém semântica de sessão. |
+| **Transaction pooler** | 6543 | ✅ Funciona. As migrações usam lock por transação exatamente para suportar este modo. |
+| Direct connection | 5432 (host `db.....supabase.co`) | ⚠️ Só por IPv6 no plano free. Muitas hospedagens não têm saída IPv6 e a conexão falha. |
+
+**3. Configure no Render:**
+
+```env
+DATABASE_URL=postgresql://postgres.<ref>:<senha>@aws-0-<regiao>.pooler.supabase.com:5432/postgres
+DATABASE_SSL=true
+DATABASE_POOL_MAX=5
+```
+
+`DATABASE_POOL_MAX=5` importa: o plano free tem poucas conexões, e cada instância
+do app abriria até 10 por padrão.
+
+**4. Opcional — use também o Storage do Supabase para os anexos.** Ele expõe um
+endpoint compatível com S3, e o driver `s3` deste projeto é genérico:
+
+```env
+STORAGE_DRIVER=s3
+S3_ENDPOINT=https://<ref>.supabase.co/storage/v1/s3
+S3_REGION=<regiao-do-projeto>
+S3_BUCKET=anexos
+S3_ACCESS_KEY_ID=<Storage access key>
+S3_SECRET_ACCESS_KEY=<Storage secret key>
+```
+
+Crie o bucket como **privado** — os downloads passam pela API de qualquer forma.
+Este caminho está documentado por compatibilidade de protocolo; ao contrário do
+banco, não consegui testá-lo contra um projeto Supabase real.
+
+#### O que pesar antes de escolher
+
+- **Tamanho.** O banco free é bem menor que a cota de arquivos (na data desta
+  escrita, 500 MB de banco e 1 GB de storage — confira os limites atuais). Para
+  este sistema isso é folgado: o banco guarda só texto e metadados, e os
+  binários vão para o storage. 500 MB comportam bem mais de um milhão de
+  mensagens.
+- **A pausa após 7 dias de inatividade é um risco, não uma conveniência.** Num
+  canal de atendimento, ela significa que um cliente que some por uma semana e
+  volta encontra o sistema fora do ar até você despausar no painel. Na prática,
+  com o serviço no ar e conectado ao banco, o projeto não fica inativo — mas não
+  trate isso como garantia. Se você também usar o plano free do Render (que
+  dorme após 15 min sem acesso), os dois podem hibernar juntos e aí a pausa
+  acontece de verdade.
+- **Backup.** No plano free o backup automático é limitado. Se as conversas
+  importarem, agende um `pg_dump` seu.
 
 ### Opção C — Railway
 
@@ -703,8 +766,11 @@ Postgres (a maioria dos provedores oferece automático) **e** do bucket/volume d
 **Logs.** JSON estruturado em produção, legível em desenvolvimento. Consultas acima de 250 ms são
 registradas como aviso.
 
-**Nova migração:** crie `server/src/db/migrations/002_descricao.sql`. Ela é aplicada automaticamente
-no próximo start, uma única vez, dentro de uma transação.
+**Nova migração:** crie `server/src/db/migrations/002_descricao.sql`. Ela é aplicada
+automaticamente no próximo start, uma única vez, dentro de uma transação protegida por um
+advisory lock *de transação* — o que a mantém segura tanto num rolling deploy quanto atrás de um
+pooler em modo transação (Supabase, Neon, PgBouncer). A contrapartida é que a migração precisa
+caber numa transação: nada de `CREATE INDEX CONCURRENTLY`.
 
 **Se você perder o acesso de administrador:** rode `npm run seed:admin` com o mesmo e-mail. A senha é
 redefinida e todas as sessões daquele administrador são revogadas.

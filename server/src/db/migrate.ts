@@ -7,9 +7,19 @@ import { logger } from '../lib/logger.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Migrations are plain, ordered .sql files. Each runs once inside its own
- * transaction, guarded by a session-level advisory lock so that concurrent boots
- * (rolling deploys) cannot apply the same file twice.
+ * Migrations are plain, ordered .sql files. Each runs exactly once, inside a
+ * transaction that opens with a *transaction-scoped* advisory lock.
+ *
+ * The lock is deliberately `pg_advisory_xact_lock` rather than the session-level
+ * `pg_advisory_lock`: a session lock held across separate statements is silently
+ * lost behind a transaction-mode connection pooler (Supabase Supavisor on 6543,
+ * PgBouncer, Neon pooled endpoints), because each statement may land on a
+ * different backend. A transaction-scoped lock is held for the whole
+ * BEGIN..COMMIT, which such poolers pin to one connection, and it is released
+ * automatically on commit or rollback — including if the process is killed.
+ *
+ * Consequence for migration authors: a migration must be able to run inside a
+ * transaction, so no CREATE INDEX CONCURRENTLY.
  */
 const ADVISORY_LOCK_KEY = 8_421_337;
 
@@ -32,39 +42,45 @@ export async function runMigrations(): Promise<void> {
 
   const client = await pool.connect();
   try {
-    await client.query('SELECT pg_advisory_lock($1)', [ADVISORY_LOCK_KEY]);
+    // The bookkeeping table is created under the same lock: two instances
+    // booting together would otherwise race on CREATE TABLE IF NOT EXISTS.
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [ADVISORY_LOCK_KEY]);
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         name       text PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now()
       )
     `);
-
-    const applied = new Set(
-      (await client.query<{ name: string }>('SELECT name FROM schema_migrations')).rows.map(
-        (r) => r.name,
-      ),
-    );
+    await client.query('COMMIT');
 
     let count = 0;
     for (const file of files) {
-      if (applied.has(file)) continue;
       const sql = await fs.readFile(path.join(dir, file), 'utf8');
-      logger.info('Applying migration', { file });
       try {
         await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [ADVISORY_LOCK_KEY]);
+
+        // Re-checked *inside* the lock: another instance may have applied this
+        // file while we were waiting for it.
+        const already = await client.query('SELECT 1 FROM schema_migrations WHERE name = $1', [file]);
+        if (already.rowCount && already.rowCount > 0) {
+          await client.query('COMMIT');
+          continue;
+        }
+
+        logger.info('Applying migration', { file });
         await client.query(sql);
         await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
         await client.query('COMMIT');
         count += 1;
       } catch (error) {
-        await client.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => undefined);
         throw new Error(`Migration ${file} failed: ${(error as Error).message}`);
       }
     }
     logger.info(count ? `Applied ${count} migration(s)` : 'Database schema up to date');
   } finally {
-    await client.query('SELECT pg_advisory_unlock($1)', [ADVISORY_LOCK_KEY]).catch(() => undefined);
     client.release();
   }
 }
