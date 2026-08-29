@@ -1,4 +1,4 @@
-import { formatDateTime, formatLastSeen, pluralize } from '@/lib/format';
+import { formatDateTime, formatLastSeen } from '@/lib/format';
 import type { AdminClient } from '@/lib/types';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -131,9 +131,7 @@ export function ClientDetailsPanel({
           <p className="whitespace-pre-wrap rounded-xl bg-surface-2 px-3.5 py-2.5 text-[13px] leading-relaxed text-ink-muted">
             {client.notes?.trim() || 'Nenhuma anotação. Use "Editar" para adicionar.'}
           </p>
-          <p className="mt-1.5 text-[11.5px] text-ink-subtle">
-            Nunca visível para o cliente — {pluralize(client.notes?.length ?? 0, 'caractere', 'caracteres')}.
-          </p>
+          <p className="mt-1.5 text-[11.5px] text-ink-subtle">Nunca visível para o cliente.</p>
         </div>
       </div>
 

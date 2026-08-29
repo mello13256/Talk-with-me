@@ -295,7 +295,7 @@ export function ProfilePage({ notifications }: { notifications: NotificationsSta
               {profileError && <p className="text-[13px] text-danger">{profileError}</p>}
               <div className="flex items-center justify-between gap-3 pt-1">
                 <p className="text-[12.5px] text-ink-subtle">
-                  Cliente desde {formatDateTime(user.createdAt)}
+                  Conta criada em {formatDateTime(user.createdAt)}
                 </p>
                 <Button type="submit" loading={savingProfile}>
                   Salvar

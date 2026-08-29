@@ -349,6 +349,15 @@ export function AdminPage({ notifications }: { notifications: NotificationsState
                 </p>
               )}
 
+              {thread.error && (
+                <div className="flex items-center justify-between gap-3 border-b border-line bg-danger-soft px-4 py-2.5">
+                  <p className="text-[12.5px] text-danger">{thread.error}</p>
+                  <Button size="sm" variant="secondary" onClick={() => void thread.reload()}>
+                    Recarregar
+                  </Button>
+                </div>
+              )}
+
               <MessageList
                 messages={thread.messages}
                 currentUserId={user!.id}

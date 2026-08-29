@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { env } from '../../config/env.js';
-import { badRequest, forbidden } from '../../lib/errors.js';
+import { forbidden } from '../../lib/errors.js';
 import { toConversationDTO, toPublicAgent, toPublicUser } from '../../lib/serializers.js';
 import * as v from '../../lib/validation.js';
 import { maybeOne } from '../../db/pool.js';
@@ -260,27 +260,5 @@ conversationRouter.delete(
       { message },
     );
     res.json({ message });
-  }),
-);
-
-const typingSchema = z.object({ isTyping: z.boolean() }).strict();
-
-/** HTTP fallback for typing when the socket is momentarily disconnected. */
-conversationRouter.post(
-  '/:id/typing',
-  asyncHandler(async (req, res) => {
-    const { id } = idParam.parse(req.params);
-    const { isTyping } = typingSchema.parse(req.body);
-    const actor = req.auth!.user;
-    const conversation = await authorizeConversation(actor, id);
-
-    if (!conversation) throw badRequest('Conversa inválida.');
-    emitToRooms([conversationRoom(conversation.id), ADMIN_ROOM], 'typing', {
-      conversationId: conversation.id,
-      userId: actor.id,
-      role: actor.role,
-      isTyping,
-    });
-    res.status(204).end();
   }),
 );

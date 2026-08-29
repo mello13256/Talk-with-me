@@ -90,7 +90,3 @@ export function avatarHue(seed: string): number {
   }
   return hash;
 }
-
-export function pluralize(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
