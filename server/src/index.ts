@@ -7,6 +7,7 @@ import { createApp } from './app.js';
 import { initRealtime } from './realtime/socket.js';
 import { resetPresenceOnBoot } from './realtime/hub.js';
 import { purgeExpiredSessions } from './modules/auth/session.service.js';
+import { ensureBootstrapAdmin, warnAboutInsecureDefaults } from './modules/auth/bootstrap.js';
 import { purgeOrphanAttachments } from './modules/attachments/attachment.service.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -14,7 +15,9 @@ const HOUR = 60 * 60 * 1000;
 async function main(): Promise<void> {
   await checkDatabase();
   await runMigrations();
+  await ensureBootstrapAdmin();
   await resetPresenceOnBoot();
+  warnAboutInsecureDefaults();
 
   const app = createApp();
   const server = http.createServer(app);

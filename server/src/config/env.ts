@@ -78,6 +78,21 @@ const schema = z
     VAPID_SUBJECT: z.string().default('mailto:admin@localhost'),
 
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+    /**
+     * First-boot administrator. Only ever used when the database has no
+     * administrator yet, so these cannot be set later to take over an account.
+     */
+    ADMIN_EMAIL: z.string().email().optional(),
+    ADMIN_PASSWORD: z.string().min(10).max(200).optional(),
+    ADMIN_NAME: z.string().min(2).max(120).default('Administrador'),
+
+    /**
+     * Escape hatch for a first deploy: lets MAIL_DRIVER=console run in
+     * production, where password-reset links are only printed to the log.
+     * Explicit and loudly warned about, so it cannot happen by accident.
+     */
+    ALLOW_INSECURE_MAIL: bool(false),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.STORAGE_DRIVER === 's3') {
@@ -105,12 +120,13 @@ const schema = z
         message: 'RESEND_API_KEY is required when MAIL_DRIVER=resend',
       });
     }
-    if (cfg.NODE_ENV === 'production' && cfg.MAIL_DRIVER === 'console') {
+    if (cfg.NODE_ENV === 'production' && cfg.MAIL_DRIVER === 'console' && !cfg.ALLOW_INSECURE_MAIL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['MAIL_DRIVER'],
         message:
-          'MAIL_DRIVER=console only prints reset links to the log; configure smtp or resend in production',
+          'MAIL_DRIVER=console only prints reset links to the log. Configure smtp or resend, ' +
+          'or set ALLOW_INSECURE_MAIL=true to accept that during a first deploy.',
       });
     }
   });

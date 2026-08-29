@@ -1,5 +1,12 @@
 # Talk with me
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mello13256/Talk-with-me/tree/claude/private-client-messaging-system-ga3zyt)
+
+> **Quer só ver funcionando online?** Clique no botão acima. O Render lê este
+> repositório, cria o serviço e o banco, e devolve uma URL do tipo
+> `https://talk-with-me.onrender.com`. A única coisa que você digita é o e-mail
+> do administrador. Detalhes na [seção 7](#7-deploy-em-produção).
+
 Um canal privado de atendimento entre **você (administrador)** e **cada um dos seus clientes**.
 Não é um grupo, não é um fórum e não existe comunicação entre clientes: cada cliente tem uma
 conversa isolada, 1 para 1, com você.
@@ -265,6 +272,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 | `TRUST_PROXY` | `0` | Nº de proxies à frente. Render/Railway/Fly = `1`. **Sem isso o rate limit vê o IP do proxy, não o do visitante.** |
 | `DATABASE_SSL` | `false` | `true` em provedores gerenciados (Neon, Supabase, Railway, Render). |
 | `ALLOW_PUBLIC_REGISTRATION` | `true` | `false` deixa o cadastro apenas por convite do administrador. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | vazio | Cria o administrador no primeiro boot, **apenas se não existir nenhum**. Remova `ADMIN_PASSWORD` depois de entrar. Veja a [seção 6](#6-criando-a-conta-de-administrador). |
 | `CORS_ORIGINS` | vazio | Deixe vazio se API e frontend estiverem no mesmo domínio (recomendado). |
 | `MAX_UPLOAD_MB` | `25` | Limite por arquivo. |
 | `BCRYPT_COST` | `12` | Aumente se o servidor for rápido. |
@@ -281,7 +289,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 | Variável | Descrição |
 | --- | --- |
-| `MAIL_DRIVER` | `console` (só desenvolvimento), `smtp` ou `resend`. Em produção `console` é rejeitado na inicialização. |
+| `MAIL_DRIVER` | `console` (só desenvolvimento), `smtp` ou `resend`. Em produção `console` é rejeitado, a menos que `ALLOW_INSECURE_MAIL=true`. |
+| `ALLOW_INSECURE_MAIL` | `false`. Só ligue no primeiro deploy: com `console`, os links de recuperação ficam apenas no log e o cliente não recupera a senha sozinho. |
 | `MAIL_FROM`, `SMTP_*`, `RESEND_API_KEY` | Conforme o driver escolhido. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Opcionais. Sem eles, o app funciona normalmente e apenas o Web Push fica desligado. Gere com `npx web-push generate-vapid-keys`. |
 
@@ -338,7 +347,29 @@ basta copiar e colar no navegador.
 `client` com o valor fixo no SQL — não há campo, corpo de requisição ou parâmetro capaz de virar
 `admin`. A promoção acontece apenas por um script executado com acesso ao servidor.
 
-### Modo recomendado — senha gerada pelo servidor
+### Modo A — variáveis de ambiente (sem terminal, ideal para deploy)
+
+Defina no painel do provedor:
+
+| Variável | Valor |
+| --- | --- |
+| `ADMIN_EMAIL` | seu e-mail |
+| `ADMIN_PASSWORD` | uma senha forte (o Render gera uma para você) |
+| `ADMIN_NAME` | o nome que os clientes veem |
+
+Na próxima inicialização a conta é criada. **Depois de entrar, remova
+`ADMIN_PASSWORD` do ambiente e troque a senha dentro do app.**
+
+Este caminho é deliberadamente estreito, para não virar uma porta dos fundos:
+
+- só roda quando **não existe nenhum administrador** no banco — apontar essas
+  variáveis para outro e-mail depois **não** cria um segundo administrador nem
+  assume uma conta existente;
+- recusa senha fraca, com a mesma política de todo o resto do sistema;
+- a senha nunca é registrada em log;
+- o servidor avisa a cada boot enquanto `ADMIN_PASSWORD` continuar definida.
+
+### Modo B — script pelo terminal, senha gerada pelo servidor
 
 ```bash
 npm run seed:admin -- --email voce@exemplo.com --name "Seu Nome"
@@ -358,7 +389,7 @@ Saída:
 A senha é gerada com `crypto.randomBytes`, mostrada **uma única vez** e gravada apenas como hash
 bcrypt. Não vai para log nem para o histórico do shell.
 
-### Modo alternativo — senha própria
+### Modo C — script com senha própria
 
 ```bash
 ADMIN_EMAIL=voce@exemplo.com ADMIN_NAME="Seu Nome" ADMIN_PASSWORD='...' npm run seed:admin
@@ -403,16 +434,34 @@ Qualquer opção abaixo entrega o mesmo resultado: **um serviço + um Postgres**
 > As migrações rodam sozinhas na inicialização, protegidas por um *advisory lock* do Postgres —
 > um rolling deploy com várias instâncias não aplica a mesma migração duas vezes.
 
-### Opção A — Render (mais simples)
+### Opção A — Render, um clique (caminho mais curto até uma URL)
 
-O `render.yaml` já descreve o serviço e o banco.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mello13256/Talk-with-me/tree/claude/private-client-messaging-system-ga3zyt)
 
-1. Dashboard → **New → Blueprint** → aponte para este repositório.
-2. Render cria o web service e o Postgres, e gera `SESSION_SECRET` / `PASSWORD_PEPPER`.
-3. Preencha as variáveis marcadas `sync: false`: `APP_URL`, credenciais de S3/R2, e-mail e VAPID.
-4. Após o primeiro deploy, abra o **Shell** e crie o administrador (seção 6).
+O `render.yaml` foi escrito para subir **sem configuração manual**:
+
+1. Clique no botão e entre com sua conta do GitHub.
+2. Preencha o único campo pedido: **`ADMIN_EMAIL`** (seu e-mail de acesso).
+3. **Apply**. O Render cria o web service e o PostgreSQL, gera `SESSION_SECRET`,
+   `PASSWORD_PEPPER` e `ADMIN_PASSWORD`, e roda as migrações no primeiro boot.
+4. Em **Environment**, copie o valor gerado de `ADMIN_PASSWORD`.
+5. Abra a URL do serviço, entre com esse e-mail e senha, e troque a senha em
+   **Perfil → Alterar senha**.
+6. Volte em **Environment** e **apague `ADMIN_PASSWORD`**.
 
 Build: `npm ci && npm run build` · Start: `npm run start --workspace=server` · Health: `/api/health`.
+
+#### Antes de abrir para clientes reais
+
+O blueprint troca duas garantias por conveniência no primeiro deploy, e o
+servidor avisa sobre as duas no log a cada inicialização:
+
+| Padrão do blueprint | Consequência | O que trocar |
+| --- | --- | --- |
+| `MAIL_DRIVER=console` + `ALLOW_INSECURE_MAIL=true` | Os links de recuperação de senha só aparecem no log do Render — **seus clientes não conseguem recuperar a senha sozinhos** | `MAIL_DRIVER=resend` + `RESEND_API_KEY` + `MAIL_FROM` com seu domínio, e remova `ALLOW_INSECURE_MAIL` |
+| `STORAGE_DRIVER=local` | Os anexos ficam no disco de 1 GB do serviço | `STORAGE_DRIVER=s3` com um bucket privado (Cloudflare R2 não cobra egress) |
+
+Ambas são variáveis de ambiente: mudar não exige tocar no código.
 
 ### Opção B — Fly.io (Docker, bom para custo baixo)
 
