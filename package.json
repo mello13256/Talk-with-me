@@ -1,0 +1,28 @@
+{
+  "name": "talk-with-me",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private 1:1 client support messaging platform",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.10"
+  },
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=web",
+    "build": "npm run build --workspace=web && npm run build --workspace=server",
+    "start": "npm run start --workspace=server",
+    "migrate": "npm run migrate --workspace=server",
+    "seed:admin": "npm run seed:admin --workspace=server",
+    "typecheck": "npm run typecheck --workspace=server && npm run typecheck --workspace=web",
+    "test": "npm run test --workspace=server",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}
