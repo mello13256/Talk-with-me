@@ -59,6 +59,8 @@ export function createApp(): Express {
           ...(isProduction ? { 'upgrade-insecure-requests': [] } : {}),
         },
       },
+      // Matches the CSP frame-ancestors directive above for older browsers.
+      frameguard: { action: 'deny' },
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: 'same-origin' },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },

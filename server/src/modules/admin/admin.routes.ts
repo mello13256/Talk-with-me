@@ -14,7 +14,7 @@ import * as v from '../../lib/validation.js';
 import { isUniqueViolation, maybeOne, one, query, rows, withTransaction } from '../../db/pool.js';
 import { asyncHandler } from '../../middleware/async.js';
 import { requireAdmin } from '../../middleware/auth.js';
-import { searchLimiter } from '../../middleware/rate-limit.js';
+import { listLimiter, searchLimiter } from '../../middleware/rate-limit.js';
 import { storage } from '../../storage/index.js';
 import {
   disconnectUser,
@@ -120,7 +120,7 @@ const FILTER_SQL: Record<z.infer<typeof listQuery>['filter'], string> = {
 
 adminRouter.get(
   '/clients',
-  searchLimiter,
+  listLimiter,
   asyncHandler(async (req, res) => {
     const input = listQuery.parse(req.query);
     const offset = (input.page - 1) * input.limit;

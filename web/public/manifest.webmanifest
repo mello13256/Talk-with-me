@@ -1,0 +1,20 @@
+{
+  "name": "Talk with me — canal privado de atendimento",
+  "short_name": "Talk with me",
+  "description": "Um canal privado para falar diretamente comigo.",
+  "start_url": "/chat",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f8f8",
+  "theme_color": "#0f7a70",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

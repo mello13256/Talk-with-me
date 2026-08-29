@@ -29,9 +29,11 @@ function make(options: Partial<Options> & { windowMs: number; limit: number }) {
 /** Authenticated users are limited per account; anonymous traffic per IP. */
 const perUserOrIp = (req: Request) => req.auth?.user.id ?? ipKey(req.ip);
 
+// Generous by design: it is a blast shield, not the primary control. The
+// endpoint-specific limiters below are what actually protect sensitive routes.
 export const globalLimiter = make({
   windowMs: 60_000,
-  limit: 300,
+  limit: 600,
   keyGenerator: perUserOrIp,
 });
 
@@ -77,5 +79,15 @@ export const uploadLimiter = make({
 export const searchLimiter = make({
   windowMs: 60_000,
   limit: 60,
+  keyGenerator: perUserOrIp,
+});
+
+/**
+ * Listing endpoints are hit by ordinary navigation and by realtime-driven
+ * refreshes, so they get a looser budget than free-text search.
+ */
+export const listLimiter = make({
+  windowMs: 60_000,
+  limit: 180,
   keyGenerator: perUserOrIp,
 });
