@@ -839,6 +839,30 @@ Crie **dois clientes** (A e B) e o administrador.
 
 ---
 
+## Checklist para lançar
+
+Antes de anunciar para clientes reais:
+
+**Obrigatório**
+- [ ] Deploy no ar com URL acessível (seção 7).
+- [ ] Domínio próprio apontando para o serviço.
+- [ ] E-mail transacional configurado (`MAIL_DRIVER=resend` ou `smtp`) e domínio
+      verificado — sem isso a recuperação de senha não funciona.
+- [ ] `STORAGE_DRIVER=s3` (ou volume persistente) para os anexos sobreviverem a deploy.
+- [ ] Administrador criado e senha trocada; `ADMIN_PASSWORD` removida do ambiente.
+- [ ] Backup do banco ativo.
+
+**Legal (Brasil / LGPD)**
+- [ ] Páginas `/privacidade` e `/termos` preenchidas: substitua `[SEU NOME OU EMPRESA]`,
+      `[E-MAIL DE CONTATO]`, `[CIDADE/ESTADO]` e `[DATA]` em `web/src/pages/LegalPage.tsx`,
+      e revise com apoio jurídico.
+
+**Recomendado**
+- [ ] Rodar o [TESTING.md](TESTING.md) já no domínio de produção.
+- [ ] Testar em um iPhone real (Safari não foi validado no desenvolvimento).
+- [ ] Ativar notificações push (chaves `VAPID_*`) se for usar.
+- [ ] Monitoramento de disponibilidade (ex.: UptimeRobot no `/api/health`).
+
 ## 10. Operação e manutenção
 
 **Health check:** `GET /api/health` → `{"status":"ok","uptime":<segundos>}`.

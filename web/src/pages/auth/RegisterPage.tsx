@@ -146,7 +146,15 @@ export function RegisterPage() {
         </Button>
 
         <p className="text-center text-[12px] leading-relaxed text-ink-subtle">
-          Ao criar a conta você concorda em usar este canal apenas para o atendimento.
+          Ao criar a conta você concorda com os{' '}
+          <Link to="/termos" className="font-medium text-brand hover:underline">
+            Termos de Uso
+          </Link>{' '}
+          e a{' '}
+          <Link to="/privacidade" className="font-medium text-brand hover:underline">
+            Política de Privacidade
+          </Link>
+          .
         </p>
       </form>
     </AuthLayout>

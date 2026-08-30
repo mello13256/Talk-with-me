@@ -10,6 +10,7 @@ import { registerServiceWorker } from '@/lib/push';
 import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
 import { LandingPage } from '@/pages/LandingPage';
+import { PrivacyPage, TermsPage } from '@/pages/LegalPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
@@ -87,6 +88,8 @@ function AppRoutes() {
       <SessionWatcher />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/privacidade" element={<PrivacyPage />} />
+        <Route path="/termos" element={<TermsPage />} />
         <Route path="/entrar" element={<LoginPage />} />
         <Route path="/criar-conta" element={<RegisterPage />} />
         <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />

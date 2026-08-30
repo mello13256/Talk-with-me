@@ -109,6 +109,20 @@ export function createApp(): Express {
   const webDist = resolveWebDist();
   if (webDist) {
     logger.info('Serving SPA', { dir: webDist });
+
+    // OpenGraph/Twitter tags need an absolute URL, which is only known at
+    // deploy time. The template ships with a %%APP_URL%% placeholder; it is
+    // replaced once here, at boot, from APP_URL — so a shared link shows a
+    // preview on whatever domain this instance runs on.
+    const indexPath = path.join(webDist, 'index.html');
+    const baseUrl = env.APP_URL.replace(/\/$/, '');
+    const indexHtml = fs
+      .readFileSync(indexPath, 'utf8')
+      .replaceAll('%%APP_URL%%', baseUrl);
+    const sendIndex = (res: import('express').Response) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('html').send(indexHtml);
+    };
     app.use(
       express.static(webDist, {
         index: false,
@@ -123,8 +137,7 @@ export function createApp(): Express {
     );
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api/') || req.path.startsWith('/socket.io')) return next();
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(webDist, 'index.html'));
+      sendIndex(res);
     });
   }
 

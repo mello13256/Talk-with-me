@@ -269,9 +269,19 @@ export function LandingPage() {
       <footer className="border-t border-line px-5 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
           <Logo compact />
-          <p className="text-[12.5px] text-ink-subtle">
-            © {new Date().getFullYear()} Talk with me · Canal privado de atendimento
-          </p>
+          <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-6">
+            <div className="flex gap-4 text-[12.5px]">
+              <Link to="/privacidade" className="text-ink-subtle hover:text-ink">
+                Privacidade
+              </Link>
+              <Link to="/termos" className="text-ink-subtle hover:text-ink">
+                Termos de Uso
+              </Link>
+            </div>
+            <p className="text-[12.5px] text-ink-subtle">
+              © {new Date().getFullYear()} Talk with me
+            </p>
+          </div>
         </div>
       </footer>
     </div>
