@@ -102,7 +102,11 @@ talk-with-me/
 ├── package.json                  # npm workspaces: server + web
 ├── docker-compose.yml            # Postgres para desenvolvimento
 ├── Dockerfile                    # imagem de produção (build multi-stage)
-├── render.yaml / fly.toml        # blueprints de deploy
+├── render.yaml / fly.toml        # blueprints de deploy gerenciado
+├── docker-compose.prod.yml       # stack completa: app + Postgres + Caddy (VM própria)
+├── deploy/
+│   ├── Caddyfile                 # proxy reverso com HTTPS automático
+│   └── setup-vm.sh               # provisiona uma VM Ubuntu do zero
 ├── .env.example                  # todas as variáveis, documentadas
 │
 ├── server/
@@ -421,7 +425,29 @@ sessões** daquele administrador — é também o procedimento de recuperação 
 
 ## 7. Deploy em produção
 
-Qualquer opção abaixo entrega o mesmo resultado: **um serviço + um Postgres**.
+### Escolhendo onde hospedar
+
+Uma restrição manda em tudo: **o processo Node precisa ficar acordado**, porque o
+chat é WebSocket. Planos gratuitos que hibernam por inatividade derrubam as
+conexões abertas e fazem a primeira mensagem esperar um boot frio. Banco e
+arquivos são fáceis de resolver de graça; o processo é o gargalo.
+
+O app usa **~85 MB de RAM** e ~54 MB em disco, então cabe na menor instância de
+qualquer lugar. Medido, não estimado.
+
+| Opção | Custo/mês | Sempre no ar | Trabalho | Quando faz sentido |
+| --- | --- | --- | --- | --- |
+| **VM Always Free (Oracle) ou VPS** + `docker-compose.prod.yml` | **US$ 0** | ✅ | Médio — uma VM para manter | **Recomendado se você quer custo zero de verdade.** Banco, arquivos e HTTPS incluídos, sem serviço externo e sem pausa. |
+| **Fly.io** | ~US$ 2 | ✅ | Baixo | Melhor relação esforço/preço. `fly.toml` pronto; retoma rápido porque suspende em vez de desligar. |
+| **Render + Supabase** | ~US$ 7 | ✅ | Muito baixo | O caminho de um clique. Você paga pela conveniência do web service. |
+| Render free + ping externo | US$ 0 | ⚠️ frágil | Baixo | Só para testar. Ver a ressalva abaixo. |
+
+> **Sobre manter o plano free do Render acordado com um ping externo:** funciona,
+> cabe nas 750 horas/mês e é tentador. Mas o plano free **não tem disco
+> persistente** (você precisa de S3 para os anexos), e manter vivo
+> artificialmente um serviço projetado para hibernar é frágil por natureza —
+> depende de um pinger de terceiros e de o provedor não fechar a brecha. Para um
+> teste, tudo bem. Para o seu canal principal com clientes, não confie nisso.
 
 ### Antes de qualquer deploy
 
@@ -429,11 +455,50 @@ Qualquer opção abaixo entrega o mesmo resultado: **um serviço + um Postgres**
 2. Defina `APP_URL` com o domínio real e `https://`.
 3. Defina `TRUST_PROXY=1` e `DATABASE_SSL=true`.
 4. Configure e-mail (`MAIL_DRIVER=smtp` ou `resend`) — sem isso a recuperação de senha não funciona,
-   e o servidor recusa subir com `console` em produção.
+   e o servidor recusa subir com `console` em produção (a menos que `ALLOW_INSECURE_MAIL=true`).
 5. Escolha o armazenamento: `s3` (recomendado) ou `local` **com volume persistente**.
 
-> As migrações rodam sozinhas na inicialização, protegidas por um *advisory lock* do Postgres —
-> um rolling deploy com várias instâncias não aplica a mesma migração duas vezes.
+> As migrações rodam sozinhas na inicialização, dentro de uma transação protegida por advisory lock
+> — um rolling deploy com várias instâncias não aplica a mesma migração duas vezes.
+
+### Opção 0 — VM própria, custo zero e sempre no ar
+
+A stack completa (**app + PostgreSQL + Caddy com HTTPS automático**) em um comando.
+Serve para a camada Always Free da Oracle Cloud, para uma VM da AWS/GCP ou para
+qualquer VPS de US$ 4.
+
+**Numa VM Ubuntu limpa, com o DNS do domínio já apontando para o IP dela:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mello13256/Talk-with-me/claude/private-client-messaging-system-ga3zyt/deploy/setup-vm.sh | bash
+```
+
+O script instala o Docker, clona o repositório, gera todos os segredos, pergunta
+três coisas (domínio, e-mail do certificado, e-mail do administrador) e sobe tudo.
+A senha do administrador é gerada e mostrada uma vez.
+
+O que você ganha por US$ 0: banco no mesmo host (sem pausa, sem limite de linhas),
+anexos em volume persistente (sem S3), HTTPS renovado sozinho pelo Caddy, e
+nenhuma dependência externa que possa hibernar.
+
+O que você assume: é uma VM sua. Atualizações de sistema e backup são seu
+trabalho. Faça `pg_dump` do volume `pgdata` periodicamente.
+
+> **Por que Caddy e não Nginx:** o Caddy repassa o upgrade de WebSocket por
+> padrão e emite o certificado sozinho. A configuração de Nginx equivalente exige
+> `proxy_set_header Upgrade`/`Connection` na mão — é o esquecimento mais comum e
+> quebra exatamente o chat em tempo real, de um jeito que só aparece em produção.
+
+Operação do dia a dia:
+
+```bash
+cd ~/talk-with-me
+sudo docker compose -f docker-compose.prod.yml logs -f app     # logs
+sudo docker compose -f docker-compose.prod.yml pull && \
+  sudo docker compose -f docker-compose.prod.yml up -d --build  # atualizar
+sudo docker compose -f docker-compose.prod.yml exec db \
+  pg_dump -U talkwithme talkwithme > backup-$(date +%F).sql     # backup
+```
 
 ### Opção A — Render, um clique (caminho mais curto até uma URL)
 

@@ -1,0 +1,100 @@
+# Talk with me — stack completa de produção para uma VM própria.
+#
+#   app + PostgreSQL + Caddy (HTTPS automático via Let's Encrypt)
+#
+# Roda em qualquer VPS ou numa VM Always Free da Oracle Cloud. O app usa ~85 MB
+# de RAM, então 1 GB sobra com folga para os três serviços.
+#
+#   cp .env.example .env      # preencha DOMAIN, ACME_EMAIL e os segredos
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Não há porta de banco nem porta do app expostas ao mundo: só o Caddy publica
+# 80/443, e ele fala com o app pela rede interna do compose.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-talkwithme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-talkwithme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-talkwithme} -d ${POSTGRES_DB:-talkwithme}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Sem `ports:` de propósito. O banco só é alcançável pela rede do compose.
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Caddy é o único proxy à frente do app.
+      TRUST_PROXY: 1
+      APP_URL: https://${DOMAIN:?defina DOMAIN no .env}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-talkwithme}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-talkwithme}
+      # Conexão interna do compose: TLS seria ruído, o tráfego não sai da VM.
+      DATABASE_SSL: 'false'
+
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env}
+      PASSWORD_PEPPER: ${PASSWORD_PEPPER:?defina PASSWORD_PEPPER no .env}
+
+      # Anexos no volume abaixo — sobrevivem a redeploy e a reboot.
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_DIR: /app/storage
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+
+      MAIL_DRIVER: ${MAIL_DRIVER:-console}
+      ALLOW_INSECURE_MAIL: ${ALLOW_INSECURE_MAIL:-true}
+      MAIL_FROM: ${MAIL_FROM:-Talk with me <no-reply@localhost>}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
+      # Só usados no primeiro boot, e só se ainda não existir administrador.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@localhost}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - storage:/app/storage
+    # Sem `ports:`. Só o Caddy alcança o app.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL no .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  storage:
+  caddy_data:
+  caddy_config:

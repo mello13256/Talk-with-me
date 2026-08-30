@@ -23,7 +23,11 @@ primary_region = "gru"
   force_https = true
   auto_stop_machines = "suspend"
   auto_start_machines = true
-  # WebSockets need at least one machine awake to keep connections alive.
+  # One machine stays awake so open WebSocket connections are not dropped and a
+  # message never waits for a boot. On a low-traffic channel this is the whole
+  # cost of the service (~US$ 2/month for shared-cpu-1x 256 MB; the app uses
+  # ~85 MB). Set it to 0 to let the machine suspend when idle and pay almost
+  # nothing, accepting a short resume on the first request after a quiet spell.
   min_machines_running = 1
 
   [http_service.concurrency]

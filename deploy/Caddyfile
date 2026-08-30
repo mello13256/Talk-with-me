@@ -1,0 +1,29 @@
+# HTTPS automático: o Caddy obtém e renova o certificado Let's Encrypt sozinho.
+# Basta o DNS do domínio apontar para o IP da VM e as portas 80/443 abertas.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# O Caddy repassa o upgrade de WebSocket por padrão — sem a configuração
+	# manual de Upgrade/Connection que costuma quebrar o chat no Nginx.
+	reverse_proxy app:4000 {
+		# Conversas ociosas não podem ser derrubadas.
+		transport http {
+			read_timeout 300s
+		}
+	}
+
+	# O app define seus próprios cabeçalhos de segurança (Helmet).
+	# Aqui só removemos o que denuncia o servidor.
+	header {
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
