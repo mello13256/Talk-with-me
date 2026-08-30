@@ -56,6 +56,8 @@ const schema = z
     STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
     STORAGE_LOCAL_DIR: z.string().default('./storage'),
     MAX_UPLOAD_MB: z.coerce.number().positive().max(200).default(25),
+    /** Teto acumulado de anexos por cliente. Impede que um cliente encha o disco. */
+    MAX_STORAGE_PER_CLIENT_MB: z.coerce.number().positive().max(50_000).default(500),
 
     S3_BUCKET: z.string().optional(),
     S3_REGION: z.string().default('auto'),
@@ -147,5 +149,6 @@ export const isProduction = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';
 
 export const MAX_UPLOAD_BYTES = Math.round(env.MAX_UPLOAD_MB * 1024 * 1024);
+export const MAX_STORAGE_PER_CLIENT_BYTES = Math.round(env.MAX_STORAGE_PER_CLIENT_MB * 1024 * 1024);
 export const SESSION_TTL_MS = env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;

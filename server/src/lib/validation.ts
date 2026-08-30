@@ -1,7 +1,21 @@
 import { z } from 'zod';
 
-/** Control characters would let a value smuggle line breaks into UI and e-mails. */
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+/**
+ * Rejected in names and free-text fields that identify a person to the operator.
+ * Beyond C0/C1 control characters, this blocks the invisible and
+ * direction-changing code points used to spoof how a name renders:
+ *
+ *   - bidi overrides/embeds/isolates (U+202A–202E, U+2066–2069) can make
+ *     "gpj.eton" display as "note.jpg";
+ *   - zero-width and joiners (U+200B–200D, U+2060, U+FEFF) hide characters or
+ *     forge look-alikes;
+ *   - the object-replacement/BOM range is never legitimate in a name.
+ *
+ * Ordinary accented and non-Latin names pass untouched — only the invisible
+ * machinery is refused.
+ */
+const UNSAFE_TEXT =
+  /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/;
 
 export const uuid = z.string().uuid('Identificador inválido.');
 
@@ -23,14 +37,14 @@ export const displayName = z
   .trim()
   .min(2, 'Informe seu nome.')
   .max(120, 'Nome muito longo.')
-  .refine((value) => !CONTROL_CHARS.test(value), 'Nome contém caracteres inválidos.');
+  .refine((value) => !UNSAFE_TEXT.test(value), 'Nome contém caracteres inválidos.');
 
 export const optionalText = (max: number) =>
   z
     .string()
     .trim()
     .max(max)
-    .refine((value) => !CONTROL_CHARS.test(value), 'Texto contém caracteres inválidos.')
+    .refine((value) => !UNSAFE_TEXT.test(value), 'Texto contém caracteres inválidos.')
     .transform((value) => (value.length === 0 ? null : value))
     .nullable()
     .optional();

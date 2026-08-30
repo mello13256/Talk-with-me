@@ -727,8 +727,17 @@ acesso acontece no servidor, e sempre que possível dentro da própria consulta 
   `object-src 'none'`), HSTS em produção.
 - **Rate limiting:** global por usuário/IP, com limites específicos para login, cadastro,
   recuperação de senha, envio de mensagens, uploads e busca.
-- **WebSocket:** autenticado pelo mesmo cookie de sessão — não há token separado para roubar — e a
-  permissão é reconferida ao entrar em qualquer sala.
+- **WebSocket:** autenticado pelo mesmo cookie de sessão — não há token separado para roubar — a
+  permissão é reconferida ao entrar em qualquer sala, e cada socket tem orçamento de eventos: um
+  cliente que dispara eventos em massa (para sobrecarregar o banco compartilhado ou floodar o
+  operador) é desconectado.
+- **Cota de armazenamento por cliente** (`MAX_STORAGE_PER_CLIENT_MB`, padrão 500 MB): o limite por
+  arquivo sozinho não impede um cliente de encher o disco um arquivo de cada vez. O administrador é
+  isento.
+- **Anti-spoofing de identidade:** nomes e campos de texto rejeitam caracteres bidi (RTL/LTR
+  override, isolates) e invisíveis (zero-width, BOM) — usados para fazer um nome se parecer com
+  outro no painel do operador. Nomes internacionais legítimos (acentos, CJK, cirílico, árabe,
+  emoji) passam normalmente.
 - **Auditoria:** toda ação administrativa privilegiada é registrada em `audit_log`.
 
 ### O que este projeto **não** faz

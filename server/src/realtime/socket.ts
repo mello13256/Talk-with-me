@@ -25,6 +25,31 @@ interface SocketData {
   user: Pick<UserRow, 'id' | 'name' | 'role'>;
   /** Conversation rooms this socket has been authorized to join. */
   joined: Set<string>;
+  /** Sliding-window counters for per-socket event rate limiting. */
+  rate: { windowStart: number; count: number };
+}
+
+/**
+ * Per-socket event budget. The handlers below hit the database (join, read) or
+ * fan out to other people (typing), so an unmetered socket is a cheap way for
+ * one client to load the shared database or spam the operator. HTTP has its own
+ * limiter; this closes the same door on the socket transport.
+ *
+ * The ceiling is generous for a human — a fast typist emits a throttled "typing"
+ * every couple of seconds — and only bites on scripted floods.
+ */
+const SOCKET_WINDOW_MS = 10_000;
+const SOCKET_MAX_EVENTS = 100;
+
+function overRateLimit(socket: AppSocket): boolean {
+  const now = Date.now();
+  const rate = socket.data.rate;
+  if (now - rate.windowStart > SOCKET_WINDOW_MS) {
+    rate.windowStart = now;
+    rate.count = 0;
+  }
+  rate.count += 1;
+  return rate.count > SOCKET_MAX_EVENTS;
 }
 
 type AppSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
@@ -85,6 +110,7 @@ export function initRealtime(httpServer: HttpServer): IOServer {
         role: resolved.user.role,
       };
       (socket as AppSocket).data.joined = new Set<string>();
+      (socket as AppSocket).data.rate = { windowStart: Date.now(), count: 0 };
       next();
     } catch (error) {
       logger.error('Socket authentication failed', { error: (error as Error).message });
@@ -95,6 +121,18 @@ export function initRealtime(httpServer: HttpServer): IOServer {
   io.on('connection', (raw) => {
     const socket = raw as AppSocket;
     const user = socket.data.user;
+
+    // Trips before any handler runs. A socket that keeps flooding past the
+    // budget is disconnected outright; a well-behaved client never reaches it.
+    socket.use((_event, next) => {
+      if (overRateLimit(socket)) {
+        logger.warn('Socket rate limit exceeded, disconnecting', { userId: user.id });
+        socket.emit('error:rate_limit', { message: 'Muitos eventos. Reconecte em instantes.' });
+        socket.disconnect(true);
+        return;
+      }
+      next();
+    });
 
     void socket.join(userRoom(user.id));
     if (user.role === 'admin') void socket.join(ADMIN_ROOM);

@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
-import { MAX_UPLOAD_BYTES } from '../../config/env.js';
+import { MAX_STORAGE_PER_CLIENT_BYTES, MAX_UPLOAD_BYTES } from '../../config/env.js';
 import { badRequest, forbidden, notFound, payloadTooLarge, unsupportedMedia } from '../../lib/errors.js';
-import { maybeOne, query, rows } from '../../db/pool.js';
+import { AppError } from '../../lib/errors.js';
+import { maybeOne, one, query, rows } from '../../db/pool.js';
 import { logger } from '../../lib/logger.js';
 import { storage } from '../../storage/index.js';
 import type { AttachmentPurpose, AttachmentRow, UserRow } from '../../types/index.js';
@@ -89,15 +90,16 @@ export function sanitizeFilename(name: string): string {
   return (
     base
       .normalize('NFKD')
-      // Control characters and quoting characters would break Content-Disposition.
-      .replace(/[\u0000-\u001f\u007f"\\]/g, '')
+      // Control, quoting, and invisible/bidi characters would break or spoof
+      // the Content-Disposition filename.
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff"\\]/g, '')
       .trim()
       .slice(0, 200) || 'arquivo'
   );
 }
 
 export interface UploadInput {
-  user: Pick<UserRow, 'id'>;
+  user: Pick<UserRow, 'id' | 'role'>;
   purpose: AttachmentPurpose;
   conversationId: string | null;
   originalName: string;
@@ -122,6 +124,24 @@ export async function storeUpload(input: UploadInput): Promise<AttachmentRow> {
   }
 
   assertContentMatchesType(mime, input.buffer);
+
+  // Cumulative quota. MAX_UPLOAD_BYTES caps a single file; without this a client
+  // could still fill the disk one allowed-size file at a time. The operator is
+  // exempt: they are trusted, and blocking their replies would be worse.
+  if (input.purpose === 'message' && input.user.role !== 'admin') {
+    const usage = await one<{ total: number }>(
+      `SELECT COALESCE(sum(size_bytes), 0)::bigint AS total
+         FROM attachments WHERE uploader_id = $1`,
+      [input.user.id],
+    );
+    if (Number(usage.total) + input.buffer.byteLength > MAX_STORAGE_PER_CLIENT_BYTES) {
+      throw new AppError(
+        413,
+        'storage_quota_exceeded',
+        'Você atingiu o limite de armazenamento. Exclua arquivos antigos para enviar novos.',
+      );
+    }
+  }
 
   // The key never derives from user input: no traversal, no collisions, and the
   // stored extension comes from the allow-list rather than the filename.
