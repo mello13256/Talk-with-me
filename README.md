@@ -743,8 +743,15 @@ Vale ser explícito para você decidir com informação:
   enviarem executáveis ou documentos de origem desconhecida, integre um scanner (ClamAV, VirusTotal)
   no fluxo de upload.
 - **A presença é em memória**, adequada para uma instância. Para rodar várias, adicione o adapter
-  Redis do Socket.IO (`@socket.io/redis-adapter`) — o restante do código já está preparado, pois toda
-  emissão passa por `realtime/hub.ts`.
+  Redis do Socket.IO (`@socket.io/redis-adapter`) e ative sticky sessions no proxy — o restante do
+  código já está preparado, pois toda emissão passa por `realtime/hub.ts`.
+- **O rate limiting também é em memória.** Ele zera quando o processo reinicia e não é compartilhado
+  entre instâncias. O bloqueio progressivo de login é a exceção: fica em `login_attempts`, no banco,
+  justamente por ser o controle que não pode ser contornado com um restart. Para várias instâncias,
+  use um store Redis no `express-rate-limit`.
+- **Não há varredura de vírus nos anexos** (já dito acima) nem verificação de reputação de links: uma
+  URL enviada por um cliente vira um link clicável com `rel="noopener noreferrer nofollow"`, mas o
+  destino não é analisado.
 
 ---
 

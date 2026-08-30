@@ -44,3 +44,13 @@ export const cursor = z.string().max(200).optional();
 export const pageLimit = z.coerce.number().int().min(1).max(100).optional();
 
 export const idList = z.array(uuid).max(50);
+
+/**
+ * Escapa os curingas do LIKE/ILIKE. Sem isso, buscar por "%" varre a tabela
+ * inteira e "_" casa com qualquer caractere — não é SQL injection (o valor
+ * continua sendo parâmetro), mas é um problema de performance e de resultado
+ * inesperado que o usuário controla.
+ */
+export function escapeLikePattern(term: string): string {
+  return term.replace(/[\\%_]/g, (char) => `\\${char}`);
+}

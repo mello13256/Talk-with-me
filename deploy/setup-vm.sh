@@ -38,6 +38,21 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
 
   gen() { openssl rand -base64 36 | tr -d '/+=' | cut -c1-40; }
+
+  # Replace the key if .env.example already defines it, append otherwise.
+  # Blindly appending would leave two definitions of the same variable, and
+  # which one wins is not something to leave to chance in a secrets file.
+  set_env() {
+    local key="$1" value="$2"
+    if grep -qE "^${key}=" .env; then
+      # Value goes through the replacement via a placeholder, so characters
+      # such as & and / in a generated secret are never seen by sed.
+      awk -v k="$key" -v v="$value" -F= 'BEGIN{OFS="="} $1==k {print k, v; next} {print}' .env > .env.tmp
+      mv .env.tmp .env
+    else
+      printf '%s=%s\n' "$key" "$value" >> .env
+    fi
+  }
   SESSION_SECRET="$(gen)"; PASSWORD_PEPPER="$(gen)"
   POSTGRES_PASSWORD="$(gen)"; ADMIN_PASSWORD="$(gen)Aa1!"
 
@@ -45,20 +60,25 @@ if [[ ! -f .env ]]; then
   read -rp "E-mail para o certificado HTTPS: "          ACME_EMAIL
   read -rp "E-mail de login do administrador: "         ADMIN_EMAIL
 
-  {
-    echo ""
-    echo "# --- gerado por deploy/setup-vm.sh ---"
-    echo "DOMAIN=$DOMAIN"
-    echo "ACME_EMAIL=$ACME_EMAIL"
-    echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
-    echo "ADMIN_EMAIL=$ADMIN_EMAIL"
-    echo "ADMIN_PASSWORD=$ADMIN_PASSWORD"
-  } >> .env
-
-  # Substitui os placeholders do .env.example pelos segredos reais.
-  sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$SESSION_SECRET|"   .env
-  sed -i "s|^PASSWORD_PEPPER=.*|PASSWORD_PEPPER=$PASSWORD_PEPPER|" .env
+  set_env NODE_ENV          production
+  set_env DOMAIN            "$DOMAIN"
+  set_env ACME_EMAIL        "$ACME_EMAIL"
+  set_env APP_URL           "https://$DOMAIN"
+  set_env TRUST_PROXY       1
+  set_env SESSION_SECRET    "$SESSION_SECRET"
+  set_env PASSWORD_PEPPER   "$PASSWORD_PEPPER"
+  set_env POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+  set_env ADMIN_EMAIL       "$ADMIN_EMAIL"
+  set_env ADMIN_PASSWORD    "$ADMIN_PASSWORD"
   chmod 600 .env
+
+  # Fail loudly rather than starting with a half-written secrets file.
+  for required in SESSION_SECRET PASSWORD_PEPPER POSTGRES_PASSWORD DOMAIN ACME_EMAIL; do
+    if ! grep -qE "^${required}=.+" .env; then
+      echo "ERRO: $required ficou vazio no .env" >&2
+      exit 1
+    fi
+  done
 
   info "Senha do administrador (anote agora):"
   printf '\n    %s\n    %s\n\n' "$ADMIN_EMAIL" "$ADMIN_PASSWORD"

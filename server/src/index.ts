@@ -48,12 +48,23 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info('Shutting down', { signal });
     clearInterval(housekeeping);
-    void io.close(() => undefined);
+
     server.close(() => {
       void closePool().finally(() => process.exit(0));
     });
-    // Never hang forever on a stuck connection.
-    setTimeout(() => process.exit(1), 10_000).unref();
+
+    // Order matters. Chat connections are long-lived by design, so waiting for
+    // them to end on their own means always hitting the timeout below and
+    // exiting non-zero — which a platform reads as a failed shutdown and which
+    // makes every rolling deploy take the full grace period.
+    void io.close();
+    server.closeAllConnections?.();
+
+    // Last resort, so a stuck socket cannot hold the process forever.
+    setTimeout(() => {
+      logger.warn('Forcing exit: connections did not close in time');
+      process.exit(1);
+    }, 10_000).unref();
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));

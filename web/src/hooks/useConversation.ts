@@ -64,7 +64,12 @@ export function useConversation(
   const messagesRef = useRef<Message[]>([]);
   const lastReadMarked = useRef<string | null>(null);
 
-  messagesRef.current = messages;
+  // Updated after commit rather than during render: mutating a ref while
+  // rendering is not safe under concurrent rendering, and scroll handlers only
+  // run after paint anyway.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const load = useCallback(async () => {
     if (!conversationId) {
@@ -155,13 +160,18 @@ export function useConversation(
     if (!newestUnread || lastReadMarked.current === newestUnread.id) return;
 
     lastReadMarked.current = newestUnread.id;
-    emit('conversation:read', { conversationId });
-    // HTTP fallback so read state still lands when the socket is down.
+
+    if (socketState === 'online') {
+      // The socket handler performs the same write and broadcasts the receipt.
+      emit('conversation:read', { conversationId });
+      return;
+    }
+    // Offline: fall back to HTTP so the receipt is not simply lost.
     void api.post(`/conversations/${conversationId}/read`).catch(() => {
       // Allow a retry on the next scroll or focus event.
       lastReadMarked.current = null;
     });
-  }, [conversationId, emit, user?.id]);
+  }, [conversationId, emit, socketState, user?.id]);
 
   /* ------------------------------------------------------------------ */
   /* Realtime                                                            */

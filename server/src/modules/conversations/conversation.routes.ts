@@ -80,14 +80,12 @@ async function broadcastNewMessage(params: {
     lastMessagePreview: previewOf(message),
     status: senderIsClient && conversation.status === 'resolved' ? 'open' : conversation.status,
   };
-  emitToAdmins('conversation:updated', {
-    ...summary,
-    unreadCount: await countUnread(conversation.id, 'admin'),
-  });
-  emitToUser(conversation.client_id, 'conversation:updated', {
-    ...summary,
-    unreadCount: await countUnread(conversation.id, 'client'),
-  });
+  const [adminUnread, clientUnread] = await Promise.all([
+    countUnread(conversation.id, 'admin'),
+    countUnread(conversation.id, 'client'),
+  ]);
+  emitToAdmins('conversation:updated', { ...summary, unreadCount: adminUnread });
+  emitToUser(conversation.client_id, 'conversation:updated', { ...summary, unreadCount: clientUnread });
 
   if (!recipientId) return;
 

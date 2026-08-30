@@ -1,7 +1,40 @@
 import type { ReactNode } from 'react';
 
-const URL_PATTERN =
-  /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+\.[a-z]{2,}[^\s<>"']*|[^\s<>"']+@[^\s<>"']+\.[a-z]{2,})/gi;
+/**
+ * Every quantifier here is bounded, and that is the whole point.
+ *
+ * An earlier version used unbounded `+` runs. There is no catastrophic
+ * backtracking, but the scan is quadratic: at each of N start positions the `+`
+ * consumes to the end of the text looking for an `@`, then gives up. One
+ * 8000-character message (the server's limit) cost ~100 ms, so a screenful of
+ * them blocked the main thread for seconds — and since a client writes the
+ * text, that is a cheap way to make the operator's panel sluggish.
+ *
+ * Real syntax is already bounded: an e-mail local part is at most 64
+ * characters, a DNS label at most 63. Encoding those limits caps each failed
+ * attempt at a few dozen steps instead of thousands, which makes the whole
+ * pass linear in practice. The cost is that absurdly long pseudo-addresses stay
+ * plain text, which is the right trade.
+ */
+const LABEL = '[A-Za-z0-9-]{1,63}';
+const URL_PATTERN = new RegExp(
+  [
+    // Explicit scheme — anchored by "http", so it fails fast.
+    'https?://[^\\s<>"\']{1,2000}',
+    // Bare host starting with www.
+    `www\\.${LABEL}(?:\\.${LABEL}){1,8}(?:/[^\\s<>"\']{0,2000})?`,
+    // E-mail address.
+    `[A-Za-z0-9._%+-]{1,64}@${LABEL}(?:\\.${LABEL}){1,8}`,
+  ].join('|'),
+  'gi',
+);
+
+/**
+ * Cheap O(n) gate: most messages contain no link at all, and this skips the
+ * regex entirely for them.
+ */
+const hasLinkHint = (text: string): boolean =>
+  text.includes('://') || text.includes('www.') || text.includes('@');
 
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
@@ -36,6 +69,8 @@ function splitTrailingPunctuation(token: string): [string, string] {
  * escaping, a message body cannot inject script, styles or attributes.
  */
 export function linkify(text: string): ReactNode[] {
+  if (!hasLinkHint(text)) return [text];
+
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let key = 0;

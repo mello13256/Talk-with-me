@@ -94,9 +94,12 @@ export function MessageList({
   const heightBeforeLoad = useRef(0);
 
   // Held in a ref so a caller that re-creates the callback each render cannot
-  // turn "mark as read" into a render loop.
+  // turn "mark as read" into a render loop. Assigned after commit, never during
+  // render.
   const reachedBottomRef = useRef(onReachedBottom);
-  reachedBottomRef.current = onReachedBottom;
+  useEffect(() => {
+    reachedBottomRef.current = onReachedBottom;
+  }, [onReachedBottom]);
 
   const rows = useMemo(() => buildRows(messages), [messages]);
 

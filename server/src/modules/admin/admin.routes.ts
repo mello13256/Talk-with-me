@@ -124,14 +124,14 @@ adminRouter.get(
   asyncHandler(async (req, res) => {
     const input = listQuery.parse(req.query);
     const offset = (input.page - 1) * input.limit;
-    const term = input.q && input.q.length > 0 ? input.q : null;
+    const term = input.q && input.q.length > 0 ? v.escapeLikePattern(input.q) : null;
 
     const where = `
       WHERE u.role = 'client'
         AND ($1::text IS NULL
-             OR u.name ILIKE '%' || $1 || '%'
-             OR u.email::text ILIKE '%' || $1 || '%'
-             OR COALESCE(u.company, '') ILIKE '%' || $1 || '%')
+             OR u.name ILIKE '%' || $1 || '%' ESCAPE '\\'
+             OR u.email::text ILIKE '%' || $1 || '%' ESCAPE '\\'
+             OR COALESCE(u.company, '') ILIKE '%' || $1 || '%' ESCAPE '\\')
         AND ${FILTER_SQL[input.filter]}
     `;
 
@@ -495,10 +495,11 @@ adminRouter.get(
          JOIN users u ON u.id = c.client_id
          LEFT JOIN users sender ON sender.id = m.sender_id
         WHERE m.deleted_at IS NULL
-          AND (m.search_vector @@ plainto_tsquery('portuguese', $1) OR m.body ILIKE '%' || $1 || '%')
+          AND (m.search_vector @@ plainto_tsquery('portuguese', $1)
+               OR m.body ILIKE '%' || $2 || '%' ESCAPE '\\')
         ORDER BY m.created_at DESC
-        LIMIT $2`,
-      [q, limit],
+        LIMIT $3`,
+      [q, v.escapeLikePattern(q), limit],
     );
 
     res.json({

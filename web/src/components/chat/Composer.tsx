@@ -322,6 +322,9 @@ export function Composer({
             }
           }}
           rows={1}
+          // Mirrors the server's limit, so a long paste is trimmed at the
+          // source instead of coming back as a 422.
+          maxLength={8000}
           placeholder={placeholder}
           aria-label="Mensagem"
           className={cn(

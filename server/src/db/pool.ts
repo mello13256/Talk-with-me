@@ -107,8 +107,32 @@ export async function withTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>
   }
 }
 
-export async function checkDatabase(): Promise<void> {
-  await pool.query('SELECT 1');
+/**
+ * Waits for the database to accept connections. A container almost always wins
+ * the race against its database on a cold start, and managed providers restart
+ * instances during maintenance; exiting immediately turns a two-second blip
+ * into a crash loop.
+ */
+export async function checkDatabase(attempts = 10): Promise<void> {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await pool.query('SELECT 1');
+      if (attempt > 1) logger.info('Database reachable', { attempt });
+      return;
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt === attempts) break;
+      const delay = Math.min(500 * 2 ** (attempt - 1), 5_000);
+      logger.warn('Database not ready, retrying', {
+        attempt,
+        delayMs: delay,
+        error: lastError.message,
+      });
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error(`Database unreachable after ${attempts} attempts: ${lastError?.message}`);
 }
 
 export async function closePool(): Promise<void> {

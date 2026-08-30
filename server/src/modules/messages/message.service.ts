@@ -3,6 +3,7 @@ import { maybeOne, query, rows, withTransaction, type Tx } from '../../db/pool.j
 import * as db from '../../db/pool.js';
 import { toMessageDTO, type MessageRowWithJoins } from '../../lib/serializers.js';
 import { unreadPredicate } from '../conversations/conversation.service.js';
+import { escapeLikePattern } from '../../lib/validation.js';
 import { storage } from '../../storage/index.js';
 import { logger } from '../../lib/logger.js';
 import type {
@@ -132,10 +133,11 @@ export async function searchInConversation(
     `${MESSAGE_SELECT}
       WHERE m.conversation_id = $1
         AND m.deleted_at IS NULL
-        AND (m.search_vector @@ plainto_tsquery('portuguese', $2) OR m.body ILIKE '%' || $2 || '%')
+        AND (m.search_vector @@ plainto_tsquery('portuguese', $2)
+             OR m.body ILIKE '%' || $3 || '%' ESCAPE '\\')
       ORDER BY m.created_at DESC
-      LIMIT $3`,
-    [conversationId, term, Math.min(Math.max(limit, 1), 50)],
+      LIMIT $4`,
+    [conversationId, term, escapeLikePattern(term), Math.min(Math.max(limit, 1), 50)],
   );
   return hydrate(list);
 }
