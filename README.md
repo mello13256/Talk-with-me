@@ -760,10 +760,17 @@ Vale ser explícito para você decidir com informação:
 ### Automatizados
 
 ```bash
-npm test          # 30 testes: senhas, tokens, allow-list de upload, cursores, escopo de leitura
+npm test          # 34 testes: senhas, tokens, allow-list de upload, cursores,
+                  # escopo de leitura e escape de curingas na busca
 npm run typecheck # TypeScript estrito nos dois workspaces
 npm run build     # o build precisa passar antes de qualquer deploy
 ```
+
+### Manuais
+
+**[TESTING.md](TESTING.md)** traz o roteiro completo, passo a passo, para validar
+o sistema como administrador e como dois clientes distintos — incluindo os
+comandos de console para provar o isolamento entre contas. ~40 minutos.
 
 ### Segurança — teste manualmente antes de liberar para clientes reais
 
