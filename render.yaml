@@ -1,56 +1,61 @@
-# Render blueprint — deploys straight from this GitHub repository.
+# Render blueprint — PLANO GRATUITO, sem cartão de crédito.
 #
-# Use the "Deploy to Render" button in the README, or:
-#   Render dashboard -> New -> Blueprint -> select this repository.
+# Banco de dados: NÃO é criado aqui. Use um Postgres gratuito externo (Neon,
+# Supabase) e cole a connection string em DATABASE_URL. O banco do Render é pago.
 #
-# It is designed to come up with ZERO manual configuration so you get a working
-# URL first. The two settings that trade safety for that convenience are marked
-# TROQUE ANTES DE USAR COM CLIENTES REAIS, and the server warns about both in
-# its own logs on every boot.
+# Duas limitações do plano free, ambas aceitáveis para começar e ambas
+# reversíveis mudando só variáveis de ambiente:
+#
+#   1. O serviço hiberna após ~15 min sem acesso. A primeira visita depois disso
+#      demora ~30-60s para acordar. Um monitor externo gratuito (UptimeRobot)
+#      batendo em /api/health resolve.
+#   2. Não há disco persistente, então os ANEXOS são perdidos quando o serviço
+#      reinicia. O texto das conversas está no banco externo e sobrevive.
+#      Para anexos duráveis, troque STORAGE_DRIVER para s3.
+#
+# A versão paga (sempre no ar, com disco e banco no Render) está em
+# render-paid.yaml — renomeie para render.yaml se migrar.
 services:
   - type: web
     name: talk-with-me
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm ci && npm run build
     startCommand: npm run start --workspace=server
     healthCheckPath: /api/health
     autoDeploy: true
 
-    # Attachments are written here. Without this disk they would be lost on
-    # every redeploy; with STORAGE_DRIVER=s3 the disk becomes unnecessary.
-    disk:
-      name: talk-with-me-storage
-      mountPath: /opt/render/project/src/storage
-      sizeGB: 1
-
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 4000
-      # Render terminates TLS at one proxy in front of the app. Without this the
-      # rate limiter would see the proxy's IP instead of the visitor's.
+      # Render termina o TLS num proxy à frente do app. Sem isto o rate limit
+      # veria o IP do proxy em vez do IP do visitante.
       - key: TRUST_PROXY
         value: 1
 
+      # --- Banco de dados externo (Neon / Supabase) ------------------------
+      # Cole a connection string completa. Prefira a versão "pooler".
       - key: DATABASE_URL
-        fromDatabase:
-          name: talk-with-me-db
-          property: connectionString
+        sync: false
       - key: DATABASE_SSL
         value: true
+      # Planos gratuitos de Postgres têm poucas conexões disponíveis.
+      - key: DATABASE_POOL_MAX
+        value: 5
 
-      # Generated once by Render and then kept for the life of the service.
-      # Rotating SESSION_SECRET signs everybody out;
-      # rotating PASSWORD_PEPPER invalidates every password.
+      # Gerados uma vez pelo Render e mantidos pela vida do serviço.
+      # Trocar SESSION_SECRET desconecta todo mundo;
+      # trocar PASSWORD_PEPPER invalida TODAS as senhas.
       - key: SESSION_SECRET
         generateValue: true
       - key: PASSWORD_PEPPER
         generateValue: true
 
-      # Public URL of the service. Render fills this in from the service itself.
+      # O Render preenche com o host do serviço, sem protocolo; o app
+      # normaliza para https automaticamente.
       - key: APP_URL
         fromService:
           type: web
@@ -59,9 +64,8 @@ services:
 
       # --- Primeiro acesso -------------------------------------------------
       # O administrador é criado no primeiro boot, e SOMENTE se ainda não
-      # existir nenhum administrador no banco.
-      # Render gera a senha; leia-a em Environment e remova ADMIN_PASSWORD
-      # depois de entrar e trocar a senha dentro do app.
+      # existir nenhum administrador no banco. Leia a senha gerada em
+      # Environment, entre, troque a senha e então REMOVA ADMIN_PASSWORD.
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
@@ -69,10 +73,9 @@ services:
       - key: ADMIN_NAME
         value: Atendimento
 
-      # --- TROQUE ANTES DE USAR COM CLIENTES REAIS -------------------------
+      # --- TROQUE ANTES DE ANUNCIAR PARA CLIENTES REAIS --------------------
       # console = os links de recuperação de senha só aparecem no log do Render.
-      # Funciona para testar, mas seus clientes não conseguem recuperar a senha.
-      # Troque para MAIL_DRIVER=resend (ou smtp) e preencha as chaves abaixo.
+      # Funciona para testar, mas seus clientes não recuperam a senha sozinhos.
       - key: MAIL_DRIVER
         value: console
       - key: ALLOW_INSECURE_MAIL
@@ -82,12 +85,12 @@ services:
       - key: RESEND_API_KEY
         sync: false
 
-      # Disco local por padrão (funciona graças ao `disk:` acima).
-      # Para armazenamento durável e barato, troque para s3 e use Cloudflare R2.
+      # Sem disco no plano free: os anexos não sobrevivem a um reinício.
+      # Troque para s3 (Supabase Storage, Cloudflare R2) quando for usar de verdade.
       - key: STORAGE_DRIVER
         value: local
-      - key: STORAGE_LOCAL_DIR
-        value: /opt/render/project/src/storage
+      - key: MAX_UPLOAD_MB
+        value: 10
       - key: S3_BUCKET
         sync: false
       - key: S3_ENDPOINT
@@ -98,15 +101,9 @@ services:
         sync: false
 
       # Notificações push do navegador (opcional).
-      # Gere com: npx web-push generate-vapid-keys
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
       - key: VAPID_SUBJECT
         sync: false
-
-databases:
-  - name: talk-with-me-db
-    plan: basic-256mb
-    postgresMajorVersion: "16"

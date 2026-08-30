@@ -1,0 +1,112 @@
+# Render blueprint — deploys straight from this GitHub repository.
+#
+# Use the "Deploy to Render" button in the README, or:
+#   Render dashboard -> New -> Blueprint -> select this repository.
+#
+# It is designed to come up with ZERO manual configuration so you get a working
+# URL first. The two settings that trade safety for that convenience are marked
+# TROQUE ANTES DE USAR COM CLIENTES REAIS, and the server warns about both in
+# its own logs on every boot.
+services:
+  - type: web
+    name: talk-with-me
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start --workspace=server
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    # Attachments are written here. Without this disk they would be lost on
+    # every redeploy; with STORAGE_DRIVER=s3 the disk becomes unnecessary.
+    disk:
+      name: talk-with-me-storage
+      mountPath: /opt/render/project/src/storage
+      sizeGB: 1
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      # Render terminates TLS at one proxy in front of the app. Without this the
+      # rate limiter would see the proxy's IP instead of the visitor's.
+      - key: TRUST_PROXY
+        value: 1
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: talk-with-me-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: true
+
+      # Generated once by Render and then kept for the life of the service.
+      # Rotating SESSION_SECRET signs everybody out;
+      # rotating PASSWORD_PEPPER invalidates every password.
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PASSWORD_PEPPER
+        generateValue: true
+
+      # Public URL of the service. Render fills this in from the service itself.
+      - key: APP_URL
+        fromService:
+          type: web
+          name: talk-with-me
+          property: host
+
+      # --- Primeiro acesso -------------------------------------------------
+      # O administrador é criado no primeiro boot, e SOMENTE se ainda não
+      # existir nenhum administrador no banco.
+      # Render gera a senha; leia-a em Environment e remova ADMIN_PASSWORD
+      # depois de entrar e trocar a senha dentro do app.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: ADMIN_NAME
+        value: Atendimento
+
+      # --- TROQUE ANTES DE USAR COM CLIENTES REAIS -------------------------
+      # console = os links de recuperação de senha só aparecem no log do Render.
+      # Funciona para testar, mas seus clientes não conseguem recuperar a senha.
+      # Troque para MAIL_DRIVER=resend (ou smtp) e preencha as chaves abaixo.
+      - key: MAIL_DRIVER
+        value: console
+      - key: ALLOW_INSECURE_MAIL
+        value: true
+      - key: MAIL_FROM
+        value: Talk with me <no-reply@example.com>
+      - key: RESEND_API_KEY
+        sync: false
+
+      # Disco local por padrão (funciona graças ao `disk:` acima).
+      # Para armazenamento durável e barato, troque para s3 e use Cloudflare R2.
+      - key: STORAGE_DRIVER
+        value: local
+      - key: STORAGE_LOCAL_DIR
+        value: /opt/render/project/src/storage
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+
+      # Notificações push do navegador (opcional).
+      # Gere com: npx web-push generate-vapid-keys
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+
+databases:
+  - name: talk-with-me-db
+    plan: basic-256mb
+    postgresMajorVersion: "16"

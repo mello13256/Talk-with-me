@@ -35,7 +35,20 @@ const schema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(4000),
-    APP_URL: z.string().url().default('http://localhost:5173'),
+    /**
+     * Public base URL. Platforms such as Render and Railway expose the service
+     * host without a scheme ("app.onrender.com"), so a bare host is accepted
+     * and normalized to https rather than failing validation at boot.
+     */
+    APP_URL: z
+      .string()
+      .min(1)
+      .transform((value) => {
+        const trimmed = value.trim().replace(/\/+$/, '');
+        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      })
+      .pipe(z.string().url())
+      .default('http://localhost:5173'),
     TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
 
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
