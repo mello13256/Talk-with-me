@@ -7,6 +7,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { env, isProduction } from './config/env.js';
 import { logger } from './lib/logger.js';
+import { checkDatabase } from './db/pool.js';
 import { loadSession } from './middleware/auth.js';
 import { verifyCsrf } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
@@ -90,8 +91,32 @@ export function createApp(): Express {
   app.use(express.json({ limit: '256kb' }));
   app.use(cookieParser());
 
+  /**
+   * Liveness. Deliberately touches nothing but the process itself.
+   *
+   * This is both the platform's health check and the target for an external
+   * keep-alive pinger, so it must not fail for a reason outside the process:
+   * a health check that queries the database turns a brief database blip into
+   * a restart loop. It also must not query the database because a serverless
+   * Postgres suspends when idle, and a ping every few minutes would hold it
+   * awake around the clock and burn the free compute allowance.
+   */
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', uptime: Math.round(process.uptime()) });
+  });
+
+  /**
+   * Readiness: can this instance actually serve a request end to end?
+   * Separate from liveness on purpose, and meant for occasional checks — it
+   * wakes a suspended database, so do not poll it on a short interval.
+   */
+  app.get('/api/health/ready', (_req, res) => {
+    void checkDatabase(1)
+      .then(() => res.json({ status: 'ready', database: 'ok' }))
+      .catch((error: Error) => {
+        logger.error('Readiness check failed', { error: error.message });
+        res.status(503).json({ status: 'degraded', database: 'unreachable' });
+      });
   });
 
   // Order matters: identify the caller, throttle, then verify CSRF.
