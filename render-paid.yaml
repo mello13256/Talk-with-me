@@ -94,6 +94,14 @@ services:
         sync: false
       - key: S3_ENDPOINT
         sync: false
+      # Precisa ser a região real do provedor (ex.: sa-east-1 no Supabase).
+      # O padrão "auto" só serve para Cloudflare R2 e quebra a assinatura nos demais.
+      - key: S3_REGION
+        sync: false
+      # Bucket no caminho da URL, e não no subdomínio. Exigido por praticamente
+      # todo serviço S3-compatível que não seja a AWS.
+      - key: S3_FORCE_PATH_STYLE
+        value: true
       - key: S3_ACCESS_KEY_ID
         sync: false
       - key: S3_SECRET_ACCESS_KEY
