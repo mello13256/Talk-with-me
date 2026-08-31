@@ -303,7 +303,12 @@ authRouter.post(
         url,
         brand: settings?.brand_name ?? 'Talk with me',
       });
-      await sendMail({ ...mail, to: user.email });
+      // Deliberately not awaited. Delivery can take seconds — or hang, when an
+      // outbound port is blocked — and the caller must not wait for it. It also
+      // closes a timing oracle: awaiting made the response slow only when the
+      // account existed, which told an attacker exactly what the identical
+      // response body is meant to hide. sendMail logs its own failures.
+      void sendMail({ ...mail, to: user.email });
     }
 
     // Identical response either way: this endpoint is not an account oracle.

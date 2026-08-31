@@ -25,6 +25,11 @@ async function getSmtpTransport(): Promise<Transport> {
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
       secure: env.SMTP_SECURE,
+      // Without these a blocked outbound port or an unresponsive relay leaves
+      // the connection hanging with no error, for minutes.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
       ...(env.SMTP_USER
         ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD ?? '' } }
         : {}),
