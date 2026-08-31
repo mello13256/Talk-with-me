@@ -101,6 +101,13 @@ export function MessageList({
     reachedBottomRef.current = onReachedBottom;
   }, [onReachedBottom]);
 
+  // Mirrors `pinnedToBottom` for the viewport listener below, which is
+  // registered once and would otherwise close over a stale value.
+  const pinnedToBottomRef = useRef(pinnedToBottom);
+  useEffect(() => {
+    pinnedToBottomRef.current = pinnedToBottom;
+  }, [pinnedToBottom]);
+
   const rows = useMemo(() => buildRows(messages), [messages]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -174,6 +181,26 @@ export function MessageList({
   useEffect(() => {
     if (pinnedToBottom && document.visibilityState === 'visible') reachedBottomRef.current();
   }, [pinnedToBottom, messages.length]);
+
+  /**
+   * Re-anchor when the on-screen keyboard opens or closes.
+   *
+   * The viewport losing half its height is not a message change, so nothing
+   * above reacts to it, and the newest message — the one being replied to —
+   * scrolls out of sight exactly when the keyboard appears. Only someone
+   * already at the bottom is moved: a reader scrolled up into the history
+   * stays where they were.
+   */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const handleResize = () => {
+      if (!pinnedToBottomRef.current) return;
+      bottomRef.current?.scrollIntoView({ block: 'end' });
+    };
+    viewport.addEventListener('resize', handleResize);
+    return () => viewport.removeEventListener('resize', handleResize);
+  }, []);
 
   if (loading) return <MessageSkeleton />;
 

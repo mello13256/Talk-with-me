@@ -2,7 +2,18 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!--
+      interactive-widget=resizes-content: when the on-screen keyboard opens,
+      shrink the layout viewport, not just the visual one. Under the default
+      (resizes-visual) the page keeps its full height, so `100dvh` does not
+      change and the keyboard covers the composer — the chat's most important
+      control. Safari ignores this property and already handles the keyboard on
+      its own, so it only affects the browsers that need it.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#0b1220" />
     <title>Talk with me — canal privado de atendimento</title>
     <meta
