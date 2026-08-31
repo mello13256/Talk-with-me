@@ -109,6 +109,32 @@ async function deliver(mail: Mail): Promise<void> {
 /** Which driver is active, for the diagnostics screen. */
 export const activeMailDriver = (): string => env.MAIL_DRIVER;
 
+/**
+ * What the server actually sees, for the diagnostics screen. Reports only
+ * whether the secrets are present — never their values.
+ */
+export function mailConfigSummary(): Record<string, string> {
+  const summary: Record<string, string> = {
+    MAIL_DRIVER: env.MAIL_DRIVER,
+    MAIL_FROM: env.MAIL_FROM || '(vazio)',
+  };
+  if (env.MAIL_DRIVER === 'smtp') {
+    summary.SMTP_HOST = env.SMTP_HOST || '(vazio)';
+    summary.SMTP_PORT = String(env.SMTP_PORT);
+    summary.SMTP_SECURE = String(env.SMTP_SECURE);
+    summary.SMTP_USER = env.SMTP_USER || '(vazio)';
+    summary.SMTP_PASSWORD = env.SMTP_PASSWORD
+      ? `definida (${env.SMTP_PASSWORD.length} caracteres${
+          /\s/.test(env.SMTP_PASSWORD) ? ', CONTÉM ESPAÇOS' : ''
+        })`
+      : '(vazio)';
+  }
+  if (env.MAIL_DRIVER === 'resend') {
+    summary.RESEND_API_KEY = env.RESEND_API_KEY ? 'definida' : '(vazio)';
+  }
+  return summary;
+}
+
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,

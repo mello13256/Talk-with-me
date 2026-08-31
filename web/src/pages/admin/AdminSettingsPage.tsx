@@ -84,7 +84,9 @@ export function AdminSettingsPage({ notifications }: { notifications: Notificati
 
   const [mailTesting, setMailTesting] = useState(false);
   const [mailResult, setMailResult] = useState<
-    { ok: true; driver: string; sentTo: string } | { ok: false; error: string; hint: string } | null
+    | { ok: true; driver: string; sentTo: string; config?: Record<string, string> }
+    | { ok: false; error: string; hint: string; config?: Record<string, string> }
+    | null
   >(null);
 
   useEffect(() => {
@@ -144,8 +146,8 @@ export function AdminSettingsPage({ notifications }: { notifications: Notificati
     try {
       // The endpoint answers 200 either way; `ok` carries the verdict.
       const data = await api.post<
-        | { ok: true; driver: string; sentTo: string }
-        | { ok: false; driver: string; error: string; hint: string }
+        | { ok: true; driver: string; sentTo: string; config?: Record<string, string> }
+        | { ok: false; driver: string; error: string; hint: string; config?: Record<string, string> }
       >('/admin/test-email');
       setMailResult(data);
     } catch (caught) {
@@ -242,6 +244,25 @@ export function AdminSettingsPage({ notifications }: { notifications: Notificati
                 </div>
                 <p className="pl-6 font-mono text-[11.5px] opacity-80">{mailResult.error}</p>
               </div>
+            )}
+
+            {mailResult?.config && (
+              <details className="mt-3 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5">
+                <summary className="cursor-pointer text-[12.5px] font-medium text-ink-muted">
+                  Configuração que o servidor está usando
+                </summary>
+                <dl className="mt-2 space-y-1">
+                  {Object.entries(mailResult.config).map(([key, value]) => (
+                    <div key={key} className="flex gap-2 font-mono text-[11.5px]">
+                      <dt className="shrink-0 text-ink-subtle">{key}</dt>
+                      <dd className="min-w-0 break-all text-ink">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-2 text-[11.5px] text-ink-subtle">
+                  Senhas e chaves nunca são exibidas — apenas se estão preenchidas.
+                </p>
+              </details>
             )}
           </Card>
 

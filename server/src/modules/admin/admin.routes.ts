@@ -30,7 +30,7 @@ import {
   setConversationStatus,
 } from '../conversations/conversation.service.js';
 import { createNotification } from '../notifications/notification.service.js';
-import { activeMailDriver, sendMailOrThrow } from '../../lib/mailer.js';
+import { activeMailDriver, mailConfigSummary, sendMailOrThrow } from '../../lib/mailer.js';
 import type { ConversationRow, UserRow } from '../../types/index.js';
 
 export const adminRouter = Router();
@@ -597,9 +597,10 @@ adminRouter.post(
         driver: activeMailDriver(),
         sentTo: admin.email,
         ms: Date.now() - startedAt,
+        config: mailConfigSummary(),
       });
     } catch (error) {
-      const message = (error as Error).message;
+      const message = (error as Error)?.message || String(error) || 'Erro sem mensagem.';
       logger.error('Test e-mail failed', { error: message });
       // 200 on purpose: the diagnostic itself succeeded. The failure it reports
       // belongs in the body, where the screen can render the cause and the fix.
@@ -609,6 +610,7 @@ adminRouter.post(
         // The raw provider message is the whole point: it names the real cause.
         error: message,
         hint: diagnoseMailError(message),
+        config: mailConfigSummary(),
       });
     }
   }),
@@ -620,8 +622,26 @@ function diagnoseMailError(message: string): string {
   if (m.includes('invalid login') || m.includes('535') || m.includes('username and password')) {
     return 'Credenciais recusadas. No Gmail, use uma "senha de app" (não a senha da conta) e cole-a sem espaços.';
   }
-  if (m.includes('greeting never received') || m.includes('etimedout') || m.includes('econnrefused')) {
+  if (
+    m.includes('greeting never received') ||
+    m.includes('etimedout') ||
+    m.includes('econnrefused') ||
+    m.includes('esocket') ||
+    m.includes('econnreset')
+  ) {
     return 'Não foi possível alcançar o servidor de e-mail. A hospedagem provavelmente bloqueia a saída SMTP; use um serviço que envie por API HTTP.';
+  }
+  if (m.includes('enotfound') || m.includes('eai_again') || m.includes('getaddrinfo')) {
+    return 'O endereço do servidor de e-mail não foi encontrado. Confira se SMTP_HOST está escrito corretamente (ex.: smtp.gmail.com).';
+  }
+  if (m.includes('missing credentials') || m.includes('no auth mechanism')) {
+    return 'Faltam usuário e/ou senha. Preencha SMTP_USER e SMTP_PASSWORD.';
+  }
+  if (m.includes('mail command failed') || m.includes('sender address rejected') || m.includes('5.7.0')) {
+    return 'O provedor recusou o remetente. O e-mail em MAIL_FROM precisa ser o mesmo de SMTP_USER.';
+  }
+  if (m.includes('fetch failed') || m.includes('und_err')) {
+    return 'A hospedagem não conseguiu contatar a API do provedor. Confira a conectividade de saída.';
   }
   if (m.includes('self signed') || m.includes('certificate')) {
     return 'Problema no certificado TLS do servidor SMTP. Confira SMTP_HOST e SMTP_PORT.';
