@@ -10,7 +10,15 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Button, IconButton } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Field';
 import { Spinner } from '@/components/ui/Spinner';
-import { ChevronLeftIcon, HistoryIcon, SearchIcon, SettingsIcon } from '@/components/ui/icons';
+import {
+  AlertIcon,
+  CheckCircleIcon,
+  ChevronLeftIcon,
+  HistoryIcon,
+  MailIcon,
+  SearchIcon,
+  SettingsIcon,
+} from '@/components/ui/icons';
 
 interface AuditEntry {
   id: string;
@@ -74,6 +82,11 @@ export function AdminSettingsPage({ notifications }: { notifications: Notificati
 
   const [audit, setAudit] = useState<AuditEntry[]>([]);
 
+  const [mailTesting, setMailTesting] = useState(false);
+  const [mailResult, setMailResult] = useState<
+    { ok: true; driver: string; sentTo: string } | { ok: false; error: string; hint: string } | null
+  >(null);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -125,6 +138,27 @@ export function AdminSettingsPage({ notifications }: { notifications: Notificati
     [term],
   );
 
+  const testEmail = async () => {
+    setMailTesting(true);
+    setMailResult(null);
+    try {
+      // The endpoint answers 200 either way; `ok` carries the verdict.
+      const data = await api.post<
+        | { ok: true; driver: string; sentTo: string }
+        | { ok: false; driver: string; error: string; hint: string }
+      >('/admin/test-email');
+      setMailResult(data);
+    } catch (caught) {
+      setMailResult({
+        ok: false,
+        error: caught instanceof ApiError ? caught.message : 'Não foi possível contatar o servidor.',
+        hint: 'O serviço pode estar reiniciando. Aguarde um instante e tente de novo.',
+      });
+    } finally {
+      setMailTesting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <AppHeader notifications={notifications} />
@@ -169,6 +203,44 @@ export function AdminSettingsPage({ notifications }: { notifications: Notificati
             ) : (
               <div className="flex justify-center py-6">
                 <Spinner className="text-ink-subtle" />
+              </div>
+            )}
+          </Card>
+
+          <Card
+            icon={<MailIcon size={18} />}
+            title="Envio de e-mail"
+            description="Se isto falhar, seus clientes não conseguem recuperar a senha sozinhos."
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={() => void testEmail()} loading={mailTesting}>
+                Enviar e-mail de teste
+              </Button>
+              <span className="text-[12.5px] text-ink-subtle">
+                Enviamos uma mensagem para o seu próprio endereço.
+              </span>
+            </div>
+
+            {mailResult?.ok && (
+              <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-success/25 bg-success-soft px-3.5 py-3 text-[13px] text-success">
+                <CheckCircleIcon size={16} className="mt-px shrink-0" />
+                <span>
+                  Enviado para <strong>{mailResult.sentTo}</strong> pelo driver{' '}
+                  <strong>{mailResult.driver}</strong>. Confira sua caixa de entrada — e o spam, na
+                  primeira vez.
+                </span>
+              </div>
+            )}
+
+            {mailResult && !mailResult.ok && (
+              <div className="mt-4 space-y-2 rounded-xl border border-danger/25 bg-danger-soft px-3.5 py-3 text-[13px] text-danger">
+                <div className="flex items-start gap-2.5">
+                  <AlertIcon size={16} className="mt-px shrink-0" />
+                  <span>
+                    <strong>O que fazer:</strong> {mailResult.hint}
+                  </span>
+                </div>
+                <p className="pl-6 font-mono text-[11.5px] opacity-80">{mailResult.error}</p>
               </div>
             )}
           </Card>

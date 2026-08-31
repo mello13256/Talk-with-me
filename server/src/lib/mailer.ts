@@ -82,8 +82,7 @@ async function transport(): Promise<Transport> {
  */
 export async function sendMail(mail: Mail): Promise<void> {
   try {
-    const t = await transport();
-    await t.sendMail(mail);
+    await deliver(mail);
   } catch (error) {
     logger.error('Failed to send e-mail', {
       to: mail.to,
@@ -92,6 +91,23 @@ export async function sendMail(mail: Mail): Promise<void> {
     });
   }
 }
+
+/**
+ * Same delivery path, but the error reaches the caller. Used only by the
+ * administrator's own diagnostics screen, where a silent failure is exactly
+ * the problem being investigated.
+ */
+export async function sendMailOrThrow(mail: Mail): Promise<void> {
+  await deliver(mail);
+}
+
+async function deliver(mail: Mail): Promise<void> {
+  const t = await transport();
+  await t.sendMail(mail);
+}
+
+/** Which driver is active, for the diagnostics screen. */
+export const activeMailDriver = (): string => env.MAIL_DRIVER;
 
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) =>

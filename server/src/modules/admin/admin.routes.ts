@@ -14,7 +14,7 @@ import * as v from '../../lib/validation.js';
 import { isUniqueViolation, maybeOne, one, query, rows, withTransaction } from '../../db/pool.js';
 import { asyncHandler } from '../../middleware/async.js';
 import { requireAdmin } from '../../middleware/auth.js';
-import { listLimiter, searchLimiter } from '../../middleware/rate-limit.js';
+import { listLimiter, passwordResetLimiter, searchLimiter } from '../../middleware/rate-limit.js';
 import { storage } from '../../storage/index.js';
 import {
   disconnectUser,
@@ -30,6 +30,7 @@ import {
   setConversationStatus,
 } from '../conversations/conversation.service.js';
 import { createNotification } from '../notifications/notification.service.js';
+import { activeMailDriver, sendMailOrThrow } from '../../lib/mailer.js';
 import type { ConversationRow, UserRow } from '../../types/index.js';
 
 export const adminRouter = Router();
@@ -552,6 +553,87 @@ adminRouter.get(
     });
   }),
 );
+
+/* -------------------------------------------------------------------------- */
+/* Diagnostics                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sends a real message through the configured mail driver and reports what
+ * happened, in full.
+ *
+ * Password reset is deliberately silent about delivery — it must answer the
+ * same way whether or not an address exists — which means a misconfigured
+ * relay looks exactly like success. This is the one place that says out loud
+ * why a message did not go out, so the operator does not have to read server
+ * logs to find out.
+ */
+adminRouter.post(
+  '/test-email',
+  passwordResetLimiter,
+  asyncHandler(async (req, res) => {
+    const admin = req.auth!.user;
+    const startedAt = Date.now();
+
+    try {
+      await sendMailOrThrow({
+        to: admin.email,
+        subject: 'Teste de e-mail — Talk with me',
+        text:
+          `Olá, ${admin.name}.\n\n` +
+          'Se você está lendo isto, o envio de e-mails do seu canal está funcionando: ' +
+          'seus clientes conseguem recuperar a senha sozinhos.\n\n' +
+          `Driver em uso: ${activeMailDriver()}`,
+        html:
+          `<p>Olá, ${admin.name}.</p>` +
+          '<p>Se você está lendo isto, o envio de e-mails do seu canal está funcionando: ' +
+          'seus clientes conseguem recuperar a senha sozinhos.</p>' +
+          `<p style="color:#666;font-size:13px">Driver em uso: ${activeMailDriver()}</p>`,
+      });
+
+      logger.info('Test e-mail sent', { to: admin.email, ms: Date.now() - startedAt });
+      res.json({
+        ok: true,
+        driver: activeMailDriver(),
+        sentTo: admin.email,
+        ms: Date.now() - startedAt,
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      logger.error('Test e-mail failed', { error: message });
+      // 200 on purpose: the diagnostic itself succeeded. The failure it reports
+      // belongs in the body, where the screen can render the cause and the fix.
+      res.json({
+        ok: false,
+        driver: activeMailDriver(),
+        // The raw provider message is the whole point: it names the real cause.
+        error: message,
+        hint: diagnoseMailError(message),
+      });
+    }
+  }),
+);
+
+/** Turns a provider error into the action that actually fixes it. */
+function diagnoseMailError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('invalid login') || m.includes('535') || m.includes('username and password')) {
+    return 'Credenciais recusadas. No Gmail, use uma "senha de app" (não a senha da conta) e cole-a sem espaços.';
+  }
+  if (m.includes('greeting never received') || m.includes('etimedout') || m.includes('econnrefused')) {
+    return 'Não foi possível alcançar o servidor de e-mail. A hospedagem provavelmente bloqueia a saída SMTP; use um serviço que envie por API HTTP.';
+  }
+  if (m.includes('self signed') || m.includes('certificate')) {
+    return 'Problema no certificado TLS do servidor SMTP. Confira SMTP_HOST e SMTP_PORT.';
+  }
+  if (m.includes('domain is not verified') || m.includes('not verified')) {
+    return 'O remetente não está verificado no provedor. Verifique o domínio (ou o remetente avulso) antes de enviar.';
+  }
+  if (m.includes('403') || m.includes('401')) {
+    return 'Chave de API recusada pelo provedor. Confira se ela foi copiada por inteiro.';
+  }
+  return 'Confira as variáveis MAIL_* no painel da hospedagem e o log do serviço.';
+}
 
 /* -------------------------------------------------------------------------- */
 /* Settings                                                                    */
