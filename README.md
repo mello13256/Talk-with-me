@@ -294,7 +294,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 | Variável | Descrição |
 | --- | --- |
-| `MAIL_DRIVER` | `console` (só desenvolvimento), `smtp` ou `resend`. Em produção `console` é rejeitado, a menos que `ALLOW_INSECURE_MAIL=true`. |
+| `MAIL_DRIVER` | `console` (só desenvolvimento), `smtp` ou `resend`. Em produção `console` é rejeitado, a menos que `ALLOW_INSECURE_MAIL=true`. **Sem domínio próprio, use `smtp`:** o Resend exige domínio verificado e, sem ele, só entrega para o e-mail da própria conta — o que não serve para atender clientes. O SMTP do Gmail funciona sem domínio, com uma "senha de app". |
 | `ALLOW_INSECURE_MAIL` | `false`. Só ligue no primeiro deploy: com `console`, os links de recuperação ficam apenas no log e o cliente não recupera a senha sozinho. |
 | `MAIL_FROM`, `SMTP_*`, `RESEND_API_KEY` | Conforme o driver escolhido. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Opcionais. Sem eles, o app funciona normalmente e apenas o Web Push fica desligado. Gere com `npx web-push generate-vapid-keys`. |
