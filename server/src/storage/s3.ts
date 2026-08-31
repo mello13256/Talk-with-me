@@ -15,6 +15,14 @@ async function getClient() {
         region: env.S3_REGION,
         ...(env.S3_ENDPOINT ? { endpoint: env.S3_ENDPOINT } : {}),
         forcePathStyle: env.S3_FORCE_PATH_STYLE,
+        // Since v3.729 the SDK adds x-amz-sdk-checksum-algorithm and a CRC32
+        // header to every upload. Real S3 accepts them; most S3-compatible
+        // services (Supabase Storage, Cloudflare R2, Backblaze B2, MinIO) reject
+        // the request outright. Sending them only when the operation actually
+        // requires it keeps this driver portable, which is the whole point of
+        // having one.
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
         credentials: {
           accessKeyId: env.S3_ACCESS_KEY_ID ?? '',
           secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? '',
