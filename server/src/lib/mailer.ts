@@ -1,3 +1,5 @@
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
 
@@ -17,30 +19,65 @@ const consoleTransport: Transport = {
   },
 };
 
-let smtpTransport: Transport | null = null;
-async function getSmtpTransport(): Promise<Transport> {
-  if (!smtpTransport) {
-    const nodemailer = await import('nodemailer');
-    const transporter = nodemailer.default.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_SECURE,
-      // Without these a blocked outbound port or an unresponsive relay leaves
-      // the connection hanging with no error, for minutes.
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
-      ...(env.SMTP_USER
-        ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD ?? '' } }
-        : {}),
+/**
+ * Pick the address to dial, preferring IPv4.
+ *
+ * Nodemailer decides which address families to even ask DNS about by looking at
+ * this machine's own network interfaces (`isFamilySupported` in lib/shared): if
+ * it sees no non-internal IPv4 interface, it never requests the A records at
+ * all and connects over IPv6. On a host that has an IPv6 address but no IPv6
+ * route out — the usual shape of a container platform — every send then dies as
+ * `connect ENETUNREACH <v6 address>:587`, which reads like a blocked SMTP port
+ * but is really a family that was never on the table.
+ *
+ * Resolving here removes the guess. Nodemailer passes a literal IP straight
+ * through to `net.connect`, and `servername` keeps TLS validating against the
+ * real hostname instead of the address, so STARTTLS still verifies the
+ * certificate properly.
+ */
+async function smtpTarget(): Promise<{ host: string; servername?: string }> {
+  const host = env.SMTP_HOST ?? '';
+  if (!host || net.isIP(host)) return { host };
+  try {
+    const [address] = await dns.resolve4(host);
+    if (address) return { host: address, servername: host };
+    logger.warn('SMTP host has no IPv4 address; falling back to the hostname', { host });
+  } catch (error) {
+    logger.warn('Could not resolve the SMTP host to IPv4; falling back to the hostname', {
+      host,
+      error: (error as Error).message,
     });
-    smtpTransport = {
-      async sendMail(mail) {
-        await transporter.sendMail({ from: env.MAIL_FROM, ...mail });
-      },
-    };
   }
-  return smtpTransport;
+  return { host };
+}
+
+/**
+ * Built per send rather than cached: there is no connection pool here, so a
+ * transporter is only a bag of options, and rebuilding it re-resolves the host
+ * instead of pinning one address for the life of the process.
+ */
+async function getSmtpTransport(): Promise<Transport> {
+  const nodemailer = await import('nodemailer');
+  const { host, servername } = await smtpTarget();
+  const transporter = nodemailer.default.createTransport({
+    host,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_SECURE,
+    // Keeps SNI and certificate validation on the hostname when `host` is a
+    // literal address.
+    ...(servername ? { servername } : {}),
+    // Without these a blocked outbound port or an unresponsive relay leaves
+    // the connection hanging with no error, for minutes.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    ...(env.SMTP_USER ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD ?? '' } } : {}),
+  });
+  return {
+    async sendMail(mail) {
+      await transporter.sendMail({ from: env.MAIL_FROM, ...mail });
+    },
+  };
 }
 
 const resendTransport: Transport = {
@@ -113,7 +150,7 @@ export const activeMailDriver = (): string => env.MAIL_DRIVER;
  * What the server actually sees, for the diagnostics screen. Reports only
  * whether the secrets are present — never their values.
  */
-export function mailConfigSummary(): Record<string, string> {
+export async function mailConfigSummary(): Promise<Record<string, string>> {
   const summary: Record<string, string> = {
     MAIL_DRIVER: env.MAIL_DRIVER,
     MAIL_FROM: env.MAIL_FROM || '(vazio)',
@@ -128,6 +165,13 @@ export function mailConfigSummary(): Record<string, string> {
           /\s/.test(env.SMTP_PASSWORD) ? ', CONTÉM ESPAÇOS' : ''
         })`
       : '(vazio)';
+    // The address actually dialed. An IPv6 address here means the IPv4 lookup
+    // failed and the connection is about to take the route that produces
+    // ENETUNREACH on an IPv4-only host.
+    const target = await smtpTarget();
+    summary['Endereço de saída'] = target.servername
+      ? `${target.host} (IPv4)`
+      : `${target.host} — sem IPv4 resolvido`;
   }
   if (env.MAIL_DRIVER === 'resend') {
     summary.RESEND_API_KEY = env.RESEND_API_KEY ? 'definida' : '(vazio)';

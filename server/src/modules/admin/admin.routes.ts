@@ -597,7 +597,7 @@ adminRouter.post(
         driver: activeMailDriver(),
         sentTo: admin.email,
         ms: Date.now() - startedAt,
-        config: mailConfigSummary(),
+        config: await mailConfigSummary(),
       });
     } catch (error) {
       const message = (error as Error)?.message || String(error) || 'Erro sem mensagem.';
@@ -610,7 +610,7 @@ adminRouter.post(
         // The raw provider message is the whole point: it names the real cause.
         error: message,
         hint: diagnoseMailError(message),
-        config: mailConfigSummary(),
+        config: await mailConfigSummary(),
       });
     }
   }),
@@ -621,6 +621,14 @@ function diagnoseMailError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login') || m.includes('535') || m.includes('username and password')) {
     return 'Credenciais recusadas. No Gmail, use uma "senha de app" (não a senha da conta) e cole-a sem espaços.';
+  }
+  if (m.includes('enetunreach') || m.includes('ehostunreach')) {
+    // The address in the message tells the two cases apart: an IPv6 target means
+    // the connection took a route this host does not have, which is a lookup
+    // problem, not a blocked port.
+    return /enetunreach|ehostunreach\s+[0-9a-f]*:[0-9a-f:]+/i.test(message)
+      ? 'A conexão saiu por IPv6, que esta hospedagem não tem. Atualize o serviço para a versão mais recente: ela força IPv4 no envio.'
+      : 'A hospedagem não tem rota até o servidor de e-mail. Provavelmente a saída SMTP está bloqueada; use um serviço que envie por API HTTP.';
   }
   if (
     m.includes('greeting never received') ||
