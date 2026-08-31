@@ -21,7 +21,11 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm ci && npm run build
+    # --include=dev é obrigatório: o Render define NODE_ENV=production durante o
+    # build, e nesse modo o npm pula as devDependencies — que é onde vivem o
+    # Vite, o plugin do React, o Tailwind e o próprio TypeScript. Sem a flag o
+    # build do frontend não tem com o que compilar.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start --workspace=server
     healthCheckPath: /api/health
     autoDeploy: true

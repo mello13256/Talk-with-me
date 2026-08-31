@@ -10,8 +10,12 @@ npm-debug.log*
 .env.*.local
 !.env.example
 
-storage/
-uploads/
+# Barra inicial = apenas na raiz do repositório. Sem ela, a regra casaria com
+# qualquer diretório chamado "storage", incluindo o CÓDIGO em
+# server/src/storage/, que precisa ser versionado.
+/storage/
+/uploads/
+/server/storage/
 .tmp/
 
 .DS_Store

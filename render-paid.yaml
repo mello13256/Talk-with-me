@@ -13,7 +13,9 @@ services:
     runtime: node
     plan: starter
     region: oregon
-    buildCommand: npm ci && npm run build
+    # --include=dev: o Render define NODE_ENV=production no build e o npm
+    # pularia as devDependencies necessárias para compilar o frontend.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start --workspace=server
     healthCheckPath: /api/health
     autoDeploy: true
