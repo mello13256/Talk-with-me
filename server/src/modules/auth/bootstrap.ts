@@ -24,7 +24,17 @@ export async function ensureBootstrapAdmin(): Promise<void> {
     `SELECT id FROM users WHERE role = 'admin' LIMIT 1`,
   );
   if (existing) {
-    logger.info('Bootstrap admin skipped: an administrator already exists');
+    // Deliberately loud: someone editing ADMIN_PASSWORD in a dashboard almost
+    // always expects it to change the existing account's password. It does not,
+    // and staying quiet about that leaves them locked out and confused.
+    logger.warn(
+      'ADMIN_EMAIL/ADMIN_PASSWORD are set but an administrator already exists, ' +
+        'so they were IGNORED. These variables only create the very first admin; ' +
+        'they never change an existing one, which is what stops a dashboard from ' +
+        'being used to take over the account. To change the password, sign in and ' +
+        'use Perfil > Alterar senha. If the password was lost, use "Esqueci minha ' +
+        'senha" (the link is printed in this log while MAIL_DRIVER=console).',
+    );
     return;
   }
 
