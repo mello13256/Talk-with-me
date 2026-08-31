@@ -633,11 +633,20 @@ function diagnoseMailError(message: string): string {
   if (
     m.includes('greeting never received') ||
     m.includes('etimedout') ||
+    // Nodemailer's own wording for a connection that never completed; it is not
+    // a Node error code, so the check above does not catch it.
+    m.includes('connection timeout') ||
     m.includes('econnrefused') ||
     m.includes('esocket') ||
     m.includes('econnreset')
   ) {
-    return 'Não foi possível alcançar o servidor de e-mail. A hospedagem provavelmente bloqueia a saída SMTP; use um serviço que envie por API HTTP.';
+    return 'A hospedagem bloqueia a saída SMTP — o servidor de e-mail nunca respondeu. Troque MAIL_DRIVER para "brevo", que envia por API HTTP e não depende de porta SMTP.';
+  }
+  if (m.includes('brevo respondeu 400') && m.includes('sender')) {
+    return 'O Brevo recusou o remetente. Verifique esse endereço em Senders & IPs > Senders no painel do Brevo, e confirme que MAIL_FROM usa exatamente ele.';
+  }
+  if (m.includes('brevo respondeu 401')) {
+    return 'Chave do Brevo inválida. Gere uma nova em SMTP & API > API Keys e cole em BREVO_API_KEY, sem espaços.';
   }
   if (m.includes('enotfound') || m.includes('eai_again') || m.includes('getaddrinfo')) {
     return 'O endereço do servidor de e-mail não foi encontrado. Confira se SMTP_HOST está escrito corretamente (ex.: smtp.gmail.com).';

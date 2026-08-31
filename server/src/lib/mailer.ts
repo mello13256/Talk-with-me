@@ -80,6 +80,9 @@ async function getSmtpTransport(): Promise<Transport> {
   };
 }
 
+/** Same reason the SMTP transport has timeouts: a hung request must not wait forever. */
+const HTTP_TIMEOUT_MS = 15_000;
+
 const resendTransport: Transport = {
   async sendMail(mail) {
     const response = await fetch('https://api.resend.com/emails', {
@@ -95,9 +98,55 @@ const resendTransport: Transport = {
         text: mail.text,
         html: mail.html,
       }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`Resend responded ${response.status}: ${await response.text()}`);
+    }
+  },
+};
+
+/**
+ * Splits `Nome <caixa@dominio>` into the parts Brevo wants as separate fields.
+ * A bare address is accepted too, and then carries no display name.
+ */
+export function parseAddress(value: string): { name?: string; email: string } {
+  const match = /^\s*(.*?)\s*<\s*([^<>\s]+)\s*>\s*$/.exec(value);
+  if (match) {
+    const name = match[1]!.replace(/^"|"$/g, '').trim();
+    return name ? { name, email: match[2]! } : { email: match[2]! };
+  }
+  return { email: value.trim() };
+}
+
+/**
+ * Brevo over its HTTP API rather than SMTP: a platform that blocks outbound
+ * SMTP still allows an ordinary HTTPS request. Unlike Resend, Brevo can verify
+ * a single sender address, so this works without owning a domain.
+ */
+const brevoTransport: Transport = {
+  async sendMail(mail) {
+    const sender = parseAddress(env.MAIL_FROM);
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': env.BREVO_API_KEY ?? '',
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender,
+        to: [{ email: mail.to }],
+        subject: mail.subject,
+        textContent: mail.text,
+        htmlContent: mail.html,
+      }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      // Brevo explains refusals in the body (unverified sender, bad key); the
+      // status alone would not be actionable on the diagnostics screen.
+      throw new Error(`Brevo respondeu ${response.status}: ${await response.text()}`);
     }
   },
 };
@@ -108,6 +157,8 @@ async function transport(): Promise<Transport> {
       return getSmtpTransport();
     case 'resend':
       return resendTransport;
+    case 'brevo':
+      return brevoTransport;
     default:
       return consoleTransport;
   }
@@ -175,6 +226,16 @@ export async function mailConfigSummary(): Promise<Record<string, string>> {
   }
   if (env.MAIL_DRIVER === 'resend') {
     summary.RESEND_API_KEY = env.RESEND_API_KEY ? 'definida' : '(vazio)';
+  }
+  if (env.MAIL_DRIVER === 'brevo') {
+    summary.BREVO_API_KEY = env.BREVO_API_KEY
+      ? `definida (${env.BREVO_API_KEY.length} caracteres${
+          /\s/.test(env.BREVO_API_KEY) ? ', CONTÉM ESPAÇOS' : ''
+        })`
+      : '(vazio)';
+    // Brevo refuses any sender address that has not been verified in the
+    // account, so this is the field to check first when a send is rejected.
+    summary['Remetente enviado'] = parseAddress(env.MAIL_FROM).email || '(vazio)';
   }
   return summary;
 }

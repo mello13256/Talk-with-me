@@ -294,9 +294,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 | Variável | Descrição |
 | --- | --- |
-| `MAIL_DRIVER` | `console` (só desenvolvimento), `smtp` ou `resend`. Em produção `console` é rejeitado, a menos que `ALLOW_INSECURE_MAIL=true`. **Sem domínio próprio, use `smtp`:** o Resend exige domínio verificado e, sem ele, só entrega para o e-mail da própria conta — o que não serve para atender clientes. O SMTP do Gmail funciona sem domínio, com uma "senha de app". |
+| `MAIL_DRIVER` | `console` (só desenvolvimento), `brevo`, `smtp` ou `resend`. Em produção `console` é rejeitado, a menos que `ALLOW_INSECURE_MAIL=true`. **Em hospedagem, use `brevo`:** ele envia por API HTTP na porta 443, e a maioria das plataformas (Render, Vercel, Fly free) bloqueia a saída SMTP — com `smtp` o envio falha com `Connection timeout` mesmo com tudo correto. O Brevo ainda permite verificar um remetente avulso, então funciona sem domínio próprio; o Resend exige domínio verificado. `smtp` continua útil em servidor próprio. |
 | `ALLOW_INSECURE_MAIL` | `false`. Só ligue no primeiro deploy: com `console`, os links de recuperação ficam apenas no log e o cliente não recupera a senha sozinho. |
-| `MAIL_FROM`, `SMTP_*`, `RESEND_API_KEY` | Conforme o driver escolhido. |
+| `MAIL_FROM` | Remetente. Com `brevo`, precisa ser exatamente o endereço verificado na conta. |
+| `BREVO_API_KEY`, `SMTP_*`, `RESEND_API_KEY` | Conforme o driver escolhido. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Opcionais. Sem eles, o app funciona normalmente e apenas o Web Push fica desligado. Gere com `npx web-push generate-vapid-keys`. |
 
 ---
@@ -454,7 +455,8 @@ qualquer lugar. Medido, não estimado.
 1. Gere `SESSION_SECRET` e `PASSWORD_PEPPER` e guarde-os no gerenciador de segredos do provedor.
 2. Defina `APP_URL` com o domínio real e `https://`.
 3. Defina `TRUST_PROXY=1` e `DATABASE_SSL=true`.
-4. Configure e-mail (`MAIL_DRIVER=smtp` ou `resend`) — sem isso a recuperação de senha não funciona,
+4. Configure e-mail (`MAIL_DRIVER=brevo`; `smtp` só em servidor próprio, porque plataformas de
+   hospedagem bloqueiam a saída SMTP) — sem isso a recuperação de senha não funciona,
    e o servidor recusa subir com `console` em produção (a menos que `ALLOW_INSECURE_MAIL=true`).
 5. Escolha o armazenamento: `s3` (recomendado) ou `local` **com volume persistente**.
 
@@ -524,7 +526,7 @@ servidor avisa sobre as duas no log a cada inicialização:
 
 | Padrão do blueprint | Consequência | O que trocar |
 | --- | --- | --- |
-| `MAIL_DRIVER=console` + `ALLOW_INSECURE_MAIL=true` | Os links de recuperação de senha só aparecem no log do Render — **seus clientes não conseguem recuperar a senha sozinhos** | `MAIL_DRIVER=resend` + `RESEND_API_KEY` + `MAIL_FROM` com seu domínio, e remova `ALLOW_INSECURE_MAIL` |
+| `MAIL_DRIVER=console` + `ALLOW_INSECURE_MAIL=true` | Os links de recuperação de senha só aparecem no log do Render — **seus clientes não conseguem recuperar a senha sozinhos** | `MAIL_DRIVER=brevo` + `BREVO_API_KEY` + `MAIL_FROM` com o remetente verificado no Brevo, e remova `ALLOW_INSECURE_MAIL`. Não use `smtp`: o Render bloqueia a saída SMTP |
 | `STORAGE_DRIVER=local` | Os anexos ficam no disco de 1 GB do serviço | `STORAGE_DRIVER=s3` com um bucket privado (Cloudflare R2 não cobra egress) |
 
 Ambas são variáveis de ambiente: mudar não exige tocar no código.
@@ -540,7 +542,7 @@ fly secrets set \
   SESSION_SECRET="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")" \
   PASSWORD_PEPPER="$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")" \
   APP_URL="https://talk-with-me.fly.dev" \
-  MAIL_DRIVER=resend MAIL_FROM="Talk with me <no-reply@seudominio.com>" RESEND_API_KEY="..."
+  MAIL_DRIVER=brevo MAIL_FROM="Talk with me <remetente-verificado@exemplo.com>" BREVO_API_KEY="..."
 
 fly volumes create talk_with_me_data --size 3   # só se STORAGE_DRIVER=local
 fly deploy
@@ -846,8 +848,9 @@ Antes de anunciar para clientes reais:
 **Obrigatório**
 - [ ] Deploy no ar com URL acessível (seção 7).
 - [ ] Domínio próprio apontando para o serviço.
-- [ ] E-mail transacional configurado (`MAIL_DRIVER=resend` ou `smtp`) e domínio
-      verificado — sem isso a recuperação de senha não funciona.
+- [ ] E-mail transacional configurado (`MAIL_DRIVER=brevo`) e remetente verificado —
+      sem isso a recuperação de senha não funciona. Confirme pelo botão
+      **Enviar e-mail de teste** em Configurações, no painel do admin.
 - [ ] `STORAGE_DRIVER=s3` (ou volume persistente) para os anexos sobreviverem a deploy.
 - [ ] Administrador criado e senha trocada; `ADMIN_PASSWORD` removida do ambiente.
 - [ ] Backup do banco ativo.

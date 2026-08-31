@@ -79,7 +79,14 @@ const schema = z
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_FORCE_PATH_STYLE: bool(true),
 
-    MAIL_DRIVER: z.enum(['console', 'smtp', 'resend']).default('console'),
+    /**
+     * `smtp` needs an outbound connection on the SMTP port, which container
+     * platforms routinely block — the symptom is a connection timeout with
+     * everything configured correctly. `brevo` and `resend` deliver over plain
+     * HTTPS and are unaffected; of the two, only Brevo verifies a single
+     * address, so it is the one that works without owning a domain.
+     */
+    MAIL_DRIVER: z.enum(['console', 'smtp', 'resend', 'brevo']).default('console'),
     MAIL_FROM: z.string().default('Talk with me <no-reply@localhost>'),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().positive().default(587),
@@ -87,6 +94,7 @@ const schema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASSWORD: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
+    BREVO_API_KEY: z.string().optional(),
 
     VAPID_PUBLIC_KEY: z.string().optional(),
     VAPID_PRIVATE_KEY: z.string().optional(),
@@ -133,6 +141,13 @@ const schema = z
         code: z.ZodIssueCode.custom,
         path: ['RESEND_API_KEY'],
         message: 'RESEND_API_KEY is required when MAIL_DRIVER=resend',
+      });
+    }
+    if (cfg.MAIL_DRIVER === 'brevo' && !cfg.BREVO_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['BREVO_API_KEY'],
+        message: 'BREVO_API_KEY is required when MAIL_DRIVER=brevo',
       });
     }
     if (cfg.NODE_ENV === 'production' && cfg.MAIL_DRIVER === 'console' && !cfg.ALLOW_INSECURE_MAIL) {

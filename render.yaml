@@ -80,12 +80,21 @@ services:
       # --- TROQUE ANTES DE ANUNCIAR PARA CLIENTES REAIS --------------------
       # console = os links de recuperação de senha só aparecem no log do Render.
       # Funciona para testar, mas seus clientes não recuperam a senha sozinhos.
+      #
+      # NÃO use smtp aqui: o Render bloqueia a saída SMTP, e o envio falha com
+      # "Connection timeout" mesmo com host, usuário e senha corretos.
+      # Use brevo, que envia por API HTTP (porta 443) e permite verificar um
+      # remetente avulso, sem exigir domínio próprio.
       - key: MAIL_DRIVER
         value: console
       - key: ALLOW_INSECURE_MAIL
         value: true
+      # Com o driver brevo, este endereço precisa ser exatamente o remetente
+      # verificado na conta do Brevo.
       - key: MAIL_FROM
         value: Talk with me <no-reply@example.com>
+      - key: BREVO_API_KEY
+        sync: false
       - key: RESEND_API_KEY
         sync: false
 
