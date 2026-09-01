@@ -107,7 +107,34 @@ jobs:
 
       - name: Guardar a chave junto, na primeira vez
         if: steps.keystore.outputs.generated == 'true'
-        run: cp '${{ steps.keystore.outputs.path }}' out/release.keystore
+        env:
+          KS: ${{ steps.keystore.outputs.path }}
+          PW: ${{ steps.keystore.outputs.password }}
+        run: |
+          set -euo pipefail
+          cp "$KS" out/release.keystore
+
+          # Já em base64, que é a forma exigida pelo segredo do GitHub: assim
+          # basta abrir o arquivo e copiar, sem precisar de terminal.
+          {
+            echo "=== GUARDE ESTES DOIS SEGREDOS NO GITHUB ==="
+            echo "Settings > Secrets and variables > Actions > New repository secret"
+            echo
+            echo "Nome:  ANDROID_KEYSTORE_PASSWORD"
+            echo "Valor: $PW"
+            echo
+            echo "Nome:  ANDROID_KEYSTORE_B64"
+            echo "Valor: (a linha longa abaixo, inteira, sem quebras)"
+            echo
+            base64 -w0 "$KS"
+            echo
+            echo
+            echo "Guarde tambem uma copia de release.keystore fora do GitHub."
+            echo "Sem esta chave nao ha como publicar atualizacoes do aplicativo."
+            echo
+            echo "Depois de salvar os segredos, apague este artifact:"
+            echo "ele contem a chave e a senha."
+          } > out/GUARDE-ESTA-CHAVE.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -136,18 +163,18 @@ jobs:
             if [ "${{ steps.keystore.outputs.generated }}" = "true" ]; then
               echo "### 2. Guarde a chave de assinatura — importante"
               echo
-              echo "Esta execução gerou uma chave nova, incluída no artifact como \`release.keystore\`."
-              echo "**Sem ela você não consegue publicar atualizações do app:** o Android recusa"
-              echo "instalar por cima uma versão assinada com outra chave, e o usuário teria de"
-              echo "desinstalar e perder os dados locais."
+              echo "Esta execução gerou uma chave nova. **Sem ela você não consegue publicar"
+              echo "atualizações do app:** o Android recusa instalar por cima uma versão assinada"
+              echo "com outra chave, e o usuário teria de desinstalar e perder os dados locais."
               echo
-              echo "Em **Settings → Secrets and variables → Actions**, crie:"
+              echo "Dentro do artifact, abra **\`GUARDE-ESTA-CHAVE.txt\`**: ele traz os dois"
+              echo "segredos prontos para copiar e colar, inclusive a chave já convertida."
               echo
-              echo "- \`ANDROID_KEYSTORE_B64\` — o arquivo em base64: \`base64 -w0 release.keystore\`"
-              echo "- \`ANDROID_KEYSTORE_PASSWORD\` — \`${{ steps.keystore.outputs.password }}\`"
+              echo "Guarde também uma cópia de \`release.keystore\` fora do GitHub e, depois de"
+              echo "salvar os segredos, apague o artifact — ele contém a chave e a senha."
               echo
-              echo "Guarde também uma cópia do arquivo fora do GitHub. Depois disso, apague"
-              echo "o artifact desta execução: ele contém a chave e a senha."
+              echo "> A senha fica só no arquivo, não neste resumo: o resumo da execução"
+              echo "> permanece no histórico do repositório, o artifact você apaga."
             else
               echo "### 2. Chave"
               echo
