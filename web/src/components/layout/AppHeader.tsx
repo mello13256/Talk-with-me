@@ -5,7 +5,16 @@ import type { NotificationsState } from '@/hooks/useNotifications';
 import { Avatar } from '@/components/ui/Avatar';
 import { Menu } from '@/components/ui/Menu';
 import { ConfirmDialog } from '@/components/ui/Modal';
-import { ChevronDownIcon, LogOutIcon, SettingsIcon, UserIcon, UsersIcon } from '@/components/ui/icons';
+import {
+  ChevronDownIcon,
+  InstallIcon,
+  LogOutIcon,
+  SettingsIcon,
+  UserIcon,
+  UsersIcon,
+} from '@/components/ui/icons';
+import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import { IosInstallDialog } from '@/components/InstallApp';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
@@ -20,8 +29,24 @@ export function AppHeader({ notifications, onOpenConversation }: AppHeaderProps)
   const navigate = useNavigate();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const install = useInstallPrompt();
+  const [showIosInstall, setShowIosInstall] = useState(false);
 
   if (!user) return null;
+
+  // Só entra no menu quando há de fato o que fazer: com o app já instalado, ou
+  // num navegador que não oferece o caminho, o item não aparece.
+  const installItem =
+    install.kind === 'installed' || install.kind === 'unavailable'
+      ? []
+      : [
+          {
+            label: 'Instalar aplicativo',
+            icon: <InstallIcon size={15} />,
+            onSelect: () =>
+              install.kind === 'ready' ? void install.install() : setShowIosInstall(true),
+          },
+        ];
 
   const home = isAdmin ? '/admin' : '/chat';
 
@@ -57,6 +82,7 @@ export function AppHeader({ notifications, onOpenConversation }: AppHeaderProps)
                     },
                   ]
                 : []),
+              ...installItem,
               {
                 label: 'Sair da conta',
                 icon: <LogOutIcon size={15} />,
@@ -82,6 +108,8 @@ export function AppHeader({ notifications, onOpenConversation }: AppHeaderProps)
           />
         </div>
       </header>
+
+      <IosInstallDialog open={showIosInstall} onClose={() => setShowIosInstall(false)} />
 
       <ConfirmDialog
         open={confirmingLogout}

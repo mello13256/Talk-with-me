@@ -766,7 +766,44 @@ Vale ser explícito para você decidir com informação:
 
 ---
 
-## 8.1 Aplicativo Android (APK)
+## 8.1 Instalar pela própria tela (PWA)
+
+O caminho padrão, e o que basta para a maioria: o cliente toca em **Instalar** e
+o canal vira um ícone na tela inicial, abrindo em tela cheia, sem barra de
+navegador. Não há loja, arquivo para baixar nem chave de assinatura.
+
+O convite aparece em dois lugares: uma faixa no topo do chat, dispensável e com
+a recusa lembrada, e um item **Instalar aplicativo** no menu da conta, sempre
+disponível para quem dispensou.
+
+O comportamento muda conforme a plataforma, e o código trata os três casos:
+
+| Situação | O que acontece |
+| --- | --- |
+| Chrome, Edge, Samsung Internet | Botão abre o diálogo de instalação do sistema |
+| iPhone e iPad | Não existe API; o botão abre instruções ilustradas do caminho **Compartilhar → Adicionar à Tela de Início** |
+| Já instalado, ou navegador sem suporte | Nada aparece — um botão que não faz nada é pior que botão nenhum |
+
+Duas armadilhas que o código evita, e que valem saber caso alguém mexa aqui:
+
+- O evento `beforeinstallprompt` dispara **uma única vez**, possivelmente antes
+  de o React montar, e não pode ser recriado. Ele é capturado em
+  `web/public/install-hook.js`, carregado antes do bundle.
+- Esse captador **precisa ser um arquivo externo**. A política de segurança do
+  app é `script-src 'self'`, então um script embutido no `index.html` seria
+  bloqueado — sem erro visível na tela, e o botão simplesmente nunca apareceria.
+
+Notificações com o app fechado continuam dependendo das chaves **VAPID**; veja
+a observação no fim da seção seguinte.
+
+---
+
+## 8.2 Aplicativo Android (APK)
+
+Opcional, e mais trabalhoso. Vale quando você quiser distribuir um arquivo
+instalável ou publicar na Play Store. A diferença prática sobre o PWA é
+pequena: notificações e ícone já funcionam instalando pela tela.
+
 
 O app é uma **casca sobre o próprio site** (Trusted Web Activity): não há uma
 segunda base de código, e o que você publica no site chega ao aparelho sem gerar

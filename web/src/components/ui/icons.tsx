@@ -334,3 +334,25 @@ export const FilterIcon = (p: IconProps) => (
     <path d="M4 6h16l-6.2 7.3v5.2l-3.6 2v-7.2L4 6Z" />
   </Icon>
 );
+
+/** Celular recebendo uma seta: instalar o app no aparelho. */
+export const InstallIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+    <path d="M12 8v6.5" />
+    <path d="m9.5 12 2.5 2.5 2.5-2.5" />
+  </Icon>
+);
+
+/**
+ * O botão Compartilhar do iOS. Desenhado porque a instrução no iPhone precisa
+ * mostrar o símbolo: descrever "o quadrado com a seta" em palavras faz o
+ * usuário procurar na tela, ver o símbolo resolve na hora.
+ */
+export const IosShareIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 3v12" />
+    <path d="m8.5 6.5 3.5-3.5 3.5 3.5" />
+    <path d="M7 10.5H5.5A1.5 1.5 0 0 0 4 12v7.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5H17" />
+  </Icon>
+);

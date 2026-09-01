@@ -7,6 +7,7 @@ import { useConversation } from '@/hooks/useConversation';
 import type { NotificationsState } from '@/hooks/useNotifications';
 import type { Agent, Attachment, Conversation, Message } from '@/lib/types';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { InstallBanner } from '@/components/InstallApp';
 import { ConnectionBadge } from '@/components/layout/ConnectionBadge';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ConversationSearch } from '@/components/chat/ConversationSearch';
@@ -122,6 +123,7 @@ export function ChatPage({ notifications }: { notifications: NotificationsState 
   return (
     <div className="flex app-height flex-col bg-canvas">
       <AppHeader notifications={notifications} />
+      <InstallBanner />
       <ConnectionBadge />
 
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden border-line bg-surface sm:my-4 sm:rounded-2xl sm:border sm:shadow-card">
