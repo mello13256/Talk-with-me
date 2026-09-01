@@ -14,8 +14,12 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'Talk with me';
   const options = {
     body: payload.body || '',
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    // PNG, não SVG: o Android não desenha SVG em notificação, e o aviso cairia
+    // num ícone genérico do navegador em vez do ícone do canal.
+    icon: '/icons/icon-192.png',
+    // Símbolo pequeno da barra de status. O sistema o reduz a uma silhueta, daí
+    // ser um desenho sólido e sem fundo.
+    badge: '/icons/badge-72.png',
     // Collapses repeated notifications for the same conversation.
     tag: payload.tag || 'talk-with-me',
     renotify: true,
