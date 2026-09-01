@@ -1,17 +1,60 @@
 import { useState } from 'react';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import type { ManualPlatform } from '@/hooks/useInstallPrompt';
 import { Button, IconButton } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { InstallIcon, IosShareIcon, PlusIcon, XIcon } from '@/components/ui/icons';
+import { InstallIcon, IosShareIcon, MoreIcon, PlusIcon, XIcon } from '@/components/ui/icons';
 
 const DISMISSED_KEY = 'twm:install-dismissed';
 
+/** Um passo numerado das instruções. */
+function Step({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
+        {n}
+      </span>
+      {/* Fluxo de texto normal, não flex: como itens de flex, a vírgula e o
+          ponto final se soltariam para a linha seguinte. */}
+      <span className="pt-0.5 text-[14px] leading-relaxed text-ink-muted">{children}</span>
+    </li>
+  );
+}
+
 /**
- * Instruções para iPhone e iPad, onde não existe API de instalação: o caminho
- * é o menu Compartilhar do próprio Safari. Os símbolos aparecem desenhados
- * porque descrevê-los em palavras faz o usuário caçar na tela.
+ * Caminho pelo menu do próprio navegador, para Android e afins. Os símbolos
+ * aparecem desenhados porque descrevê-los em palavras faz o usuário caçar na
+ * tela.
  */
-export function IosInstallDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AndroidInstallDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Adicionar à tela inicial"
+      description="Pelo menu do navegador, em dois toques."
+      size="sm"
+    >
+      <ol className="space-y-3">
+        <Step n={1}>
+          Toque em <MoreIcon size={16} className="inline align-[-3px] text-brand" />{' '}
+          <strong className="font-medium text-ink">menu</strong>, no canto do navegador.
+        </Step>
+        <Step n={2}>
+          Escolha <strong className="font-medium text-ink">Instalar aplicativo</strong> ou{' '}
+          <strong className="font-medium text-ink">Adicionar à tela inicial</strong> — o nome muda
+          conforme o navegador.
+        </Step>
+      </ol>
+      <p className="mt-4 rounded-xl bg-surface-2 px-3.5 py-2.5 text-[12.5px] text-ink-subtle">
+        No <strong className="font-medium">Chrome</strong> costuma aparecer sozinho. Se o seu
+        navegador não mostrar a opção, abra este endereço no Chrome.
+      </p>
+    </Modal>
+  );
+}
+
+function IosInstallDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Modal
       open={open}
@@ -21,34 +64,40 @@ export function IosInstallDialog({ open, onClose }: { open: boolean; onClose: ()
       size="sm"
     >
       <ol className="space-y-3">
-        <li className="flex items-start gap-3">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
-            1
-          </span>
-          {/* Fluxo de texto normal, não flex: como itens de flex, a vírgula e o
-              ponto final se soltariam para a linha seguinte. */}
-          <span className="pt-0.5 text-[14px] leading-relaxed text-ink-muted">
-            Toque em{' '}
-            <IosShareIcon size={17} className="inline align-[-4px] text-brand" />{' '}
-            <strong className="font-medium text-ink">Compartilhar</strong>, na barra do Safari.
-          </span>
-        </li>
-        <li className="flex items-start gap-3">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
-            2
-          </span>
-          <span className="pt-0.5 text-[14px] leading-relaxed text-ink-muted">
-            Role e escolha{' '}
-            <PlusIcon size={16} className="inline align-[-3px] text-brand" />{' '}
-            <strong className="font-medium text-ink">Adicionar à Tela de Início</strong>.
-          </span>
-        </li>
+        <Step n={1}>
+          Toque em <IosShareIcon size={17} className="inline align-[-4px] text-brand" />{' '}
+          <strong className="font-medium text-ink">Compartilhar</strong>, na barra do Safari.
+        </Step>
+        <Step n={2}>
+          Role e escolha <PlusIcon size={16} className="inline align-[-3px] text-brand" />{' '}
+          <strong className="font-medium text-ink">Adicionar à Tela de Início</strong>.
+        </Step>
       </ol>
       <p className="mt-4 rounded-xl bg-surface-2 px-3.5 py-2.5 text-[12.5px] text-ink-subtle">
         Precisa ser pelo <strong className="font-medium">Safari</strong>. No Chrome do iPhone a
         opção não aparece — é uma limitação do iOS, não do site.
       </p>
     </Modal>
+  );
+}
+
+/**
+ * Escolhe as instruções conforme o aparelho. Só entra em cena quando o
+ * navegador não oferece o diálogo próprio de instalação.
+ */
+export function InstallHelpDialog({
+  open,
+  onClose,
+  platform,
+}: {
+  open: boolean;
+  onClose: () => void;
+  platform: ManualPlatform;
+}) {
+  return platform === 'ios' ? (
+    <IosInstallDialog open={open} onClose={onClose} />
+  ) : (
+    <AndroidInstallDialog open={open} onClose={onClose} />
   );
 }
 
@@ -73,7 +122,11 @@ export function InstallButton({ className }: { className?: string }) {
       >
         Instalar aplicativo
       </Button>
-      <IosInstallDialog open={showIos} onClose={() => setShowIos(false)} />
+      <InstallHelpDialog
+        open={showIos}
+        onClose={() => setShowIos(false)}
+        platform={install.kind === 'manual' ? install.platform : 'other'}
+      />
     </>
   );
 }
@@ -125,7 +178,11 @@ export function InstallBanner() {
           <XIcon size={16} />
         </IconButton>
       </div>
-      <IosInstallDialog open={showIos} onClose={() => setShowIos(false)} />
+      <InstallHelpDialog
+        open={showIos}
+        onClose={() => setShowIos(false)}
+        platform={install.kind === 'manual' ? install.platform : 'other'}
+      />
     </>
   );
 }

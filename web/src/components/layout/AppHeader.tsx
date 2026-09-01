@@ -14,7 +14,7 @@ import {
   UsersIcon,
 } from '@/components/ui/icons';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
-import { IosInstallDialog } from '@/components/InstallApp';
+import { InstallHelpDialog } from '@/components/InstallApp';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
@@ -109,7 +109,11 @@ export function AppHeader({ notifications, onOpenConversation }: AppHeaderProps)
         </div>
       </header>
 
-      <IosInstallDialog open={showIosInstall} onClose={() => setShowIosInstall(false)} />
+      <InstallHelpDialog
+        open={showIosInstall}
+        onClose={() => setShowIosInstall(false)}
+        platform={install.kind === 'manual' ? install.platform : 'other'}
+      />
 
       <ConfirmDialog
         open={confirmingLogout}

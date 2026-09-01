@@ -21,15 +21,26 @@ declare global {
   }
 }
 
+/** Qual menu o usuário precisa abrir quando o navegador não oferece o diálogo. */
+export type ManualPlatform = 'ios' | 'other';
+
 export type InstallState =
   /** Já está rodando como aplicativo — nada a oferecer. */
   | { kind: 'installed' }
   /** O navegador aceita instalar com um toque. */
   | { kind: 'ready'; install: () => Promise<boolean> }
-  /** iPhone e iPad: não existe API, o caminho é manual pelo menu Compartilhar. */
-  | { kind: 'manual' }
-  /** Navegador sem suporte, ou ainda não considerou o site instalável. */
+  /** Sem API disponível: resta ensinar o caminho pelo menu do navegador. */
+  | { kind: 'manual'; platform: ManualPlatform }
+  /** Computador, ou navegador onde instalar não faz sentido. */
   | { kind: 'unavailable' };
+
+/**
+ * Quanto esperar pelo `beforeinstallprompt` antes de desistir e ensinar o
+ * caminho manual. O evento costuma chegar logo após o registro do service
+ * worker; mostrar as instruções antes disso trocaria um toque só pelo passo a
+ * passo justamente em quem teria a experiência boa.
+ */
+const PROMPT_GRACE_MS = 2500;
 
 const isStandalone = (): boolean =>
   window.matchMedia('(display-mode: standalone)').matches ||
@@ -45,6 +56,13 @@ const isAppleMobile = (): boolean => {
 };
 
 /**
+ * Instalar na tela inicial só faz sentido num aparelho de mão. Num computador,
+ * oferecer o passo a passo seria ruído.
+ */
+const isHandheld = (): boolean =>
+  isAppleMobile() || (/Android|Mobile/.test(navigator.userAgent) && navigator.maxTouchPoints > 0);
+
+/**
  * Estado do convite para instalar o app.
  *
  * Três caminhos, porque as plataformas divergem: o Chromium entrega um diálogo
@@ -56,7 +74,10 @@ export function useInstallPrompt(): InstallState {
     if (typeof window === 'undefined') return 'unavailable';
     if (isStandalone()) return 'installed';
     if (window.__installPrompt) return 'ready';
+    // O iOS nunca dispara o evento; não há o que esperar.
     if (isAppleMobile()) return 'manual';
+    // Nos demais, começa em branco e espera o evento: só depois da carência é
+    // que vale ensinar o caminho manual.
     return 'unavailable';
   });
 
@@ -83,7 +104,19 @@ export function useInstallPrompt(): InstallState {
     const onDisplayChange = () => isStandalone() && setState('installed');
     display.addEventListener('change', onDisplayChange);
 
+    /*
+     * Rede de segurança para o celular cujo navegador nunca oferece o diálogo:
+     * Firefox e algumas versões do Samsung Internet não implementam a API, e o
+     * próprio Chrome pode não disparar o evento. Sem isto o usuário não via
+     * absolutamente nada e tinha de descobrir sozinho o menu do navegador —
+     * que é justamente o que este botão existe para evitar.
+     */
+    const timer = window.setTimeout(() => {
+      setState((current) => (current === 'unavailable' && isHandheld() ? 'manual' : current));
+    }, PROMPT_GRACE_MS);
+
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener('beforeinstallprompt', onAvailable);
       window.removeEventListener('appinstalled', onInstalled);
       display.removeEventListener('change', onDisplayChange);
@@ -107,5 +140,8 @@ export function useInstallPrompt(): InstallState {
   }, []);
 
   if (state === 'ready') return { kind: 'ready', install };
+  if (state === 'manual') {
+    return { kind: 'manual', platform: isAppleMobile() ? 'ios' : 'other' };
+  }
   return { kind: state };
 }
