@@ -26,7 +26,7 @@ const OPERATOR = {
   /** Para onde vão os pedidos de acesso, correção e exclusão de dados. */
   email: 'josefino13256@gmail.com',
   /** Cidade e estado: usados no foro dos Termos e no contato. */
-  city: '[CIDADE/ESTADO]',
+  city: 'Araucária/PR',
   /** Data da última revisão destes textos, ex.: '10 de março de 2026'. */
   updated: '1º de setembro de 2026',
 } as const;
