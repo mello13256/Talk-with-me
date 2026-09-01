@@ -1,0 +1,80 @@
+plugins {
+    id 'com.android.application'
+}
+
+/*
+ * Tudo que muda entre instalações vem de fora, via -P na linha de comando, para
+ * que o mesmo projeto sirva a qualquer domínio sem editar arquivo:
+ *
+ *   gradle assembleRelease -PsiteHost=meucanal.com.br -PappId=br.com.meucanal.app
+ */
+def siteHost = project.findProperty('siteHost') ?: 'talk-with-me-ng7p.onrender.com'
+def appId = project.findProperty('appId') ?: 'com.talkwithme.app'
+def appLabel = project.findProperty('appLabel') ?: 'Talk with me'
+def startPath = project.findProperty('startPath') ?: '/chat'
+def appVersionCode = (project.findProperty('appVersionCode') ?: '1') as Integer
+def appVersionName = project.findProperty('appVersionName') ?: '1.0.0'
+
+android {
+    namespace 'com.talkwithme.twa'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId appId
+        // 21 é o piso da Trusted Web Activity; abaixo disso o Chrome não expõe a API.
+        minSdk 21
+        targetSdk 34
+        versionCode appVersionCode
+        versionName appVersionName
+
+        manifestPlaceholders = [
+            hostName    : siteHost,
+            defaultUrl  : "https://${siteHost}${startPath}".toString(),
+            launcherName: appLabel,
+        ]
+
+        // Declaração que o app faz sobre o site. O par dela é o
+        // /.well-known/assetlinks.json servido pelo domínio; as duas precisam
+        // bater, senão o Android mantém uma barra de endereço sobre o app.
+        resValue 'string', 'asset_statements',
+            """[{ \\"relation\\": [\\"delegate_permission/common.handle_all_urls\\"], \\"target\\": { \\"namespace\\": \\"web\\", \\"site\\": \\"https://${siteHost}\\" } }]"""
+    }
+
+    /*
+     * Assinatura vinda do ambiente. Sem essas variáveis o Gradle ainda
+     * configura o projeto (útil para um build de depuração local); o que não
+     * pode é falhar no meio do CI por uma variável ausente.
+     */
+    signingConfigs {
+        release {
+            def storePath = System.getenv('ANDROID_KEYSTORE_PATH')
+            if (storePath) {
+                storeFile file(storePath)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (System.getenv('ANDROID_KEYSTORE_PATH')) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // A biblioteca do Google que hospeda o site numa Trusted Web Activity e
+    // entrega as notificações web como notificações do sistema. É por isso que
+    // o projeto não tem uma linha de Java: a activity vem dela.
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

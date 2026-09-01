@@ -1,0 +1,6 @@
+# Saídas de build do Gradle; o APK é gerado pelo workflow, não versionado.
+.gradle/
+build/
+local.properties
+*.keystore
+*.jks

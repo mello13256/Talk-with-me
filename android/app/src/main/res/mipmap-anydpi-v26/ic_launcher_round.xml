@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ícone adaptativo: o fabricante recorta a arte no formato que usar (círculo,
+  quadrado arredondado, gota). Fundo e frente vão separados justamente para o
+  recorte cair sobre a cor sólida e nunca sobre o desenho.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

@@ -96,6 +96,16 @@ const schema = z
     RESEND_API_KEY: z.string().optional(),
     BREVO_API_KEY: z.string().optional(),
 
+    /**
+     * Android app (TWA). Both are needed to serve the Digital Asset Links file
+     * that proves this site and the app belong to the same owner; without it
+     * Android keeps a browser address bar pinned above the app. The fingerprint
+     * is the SHA-256 of the signing certificate, in the colon-separated form
+     * `keytool -list` prints.
+     */
+    ANDROID_PACKAGE_NAME: z.string().optional(),
+    ANDROID_CERT_FINGERPRINT: z.string().optional(),
+
     VAPID_PUBLIC_KEY: z.string().optional(),
     VAPID_PRIVATE_KEY: z.string().optional(),
     VAPID_SUBJECT: z.string().default('mailto:admin@localhost'),

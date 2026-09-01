@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mesma cor de marca do manifest.webmanifest do site. -->
+    <color name="brand">#0F7A70</color>
+    <color name="launcher_background">#0F7A70</color>
+</resources>

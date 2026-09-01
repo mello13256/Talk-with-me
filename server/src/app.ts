@@ -119,6 +119,39 @@ export function createApp(): Express {
       });
   });
 
+  /**
+   * Digital Asset Links: tells Android that the app signed with this
+   * certificate speaks for this domain. Without it the app still runs, but
+   * Android pins a browser address bar above it, which is the difference
+   * between looking like an app and looking like a web page.
+   *
+   * Registered before the SPA fallback, which would otherwise answer this path
+   * with index.html. Absent configuration it 404s — the honest answer, since
+   * an empty grant list would claim we checked and found nothing.
+   */
+  app.get('/.well-known/assetlinks.json', (_req, res) => {
+    const pkg = env.ANDROID_PACKAGE_NAME;
+    const fingerprint = env.ANDROID_CERT_FINGERPRINT;
+    if (!pkg || !fingerprint) {
+      res.status(404).json({
+        error: 'not_configured',
+        message:
+          'Defina ANDROID_PACKAGE_NAME e ANDROID_CERT_FINGERPRINT para vincular o aplicativo Android a este domínio.',
+      });
+      return;
+    }
+    res.json([
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: pkg,
+          sha256_cert_fingerprints: [fingerprint.trim().toUpperCase()],
+        },
+      },
+    ]);
+  });
+
   // Order matters: identify the caller, throttle, then verify CSRF.
   app.use('/api', loadSession, globalLimiter, verifyCsrf);
 

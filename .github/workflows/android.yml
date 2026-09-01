@@ -1,0 +1,156 @@
+name: Aplicativo Android (APK)
+
+# Só roda quando você mandar: Actions > Aplicativo Android > Run workflow.
+# Não faz sentido reconstruir o APK a cada commit — o app é uma casca sobre o
+# site, então mudanças no site chegam ao aparelho sem gerar aplicativo novo.
+on:
+  workflow_dispatch:
+    inputs:
+      site_host:
+        description: 'Domínio do site, sem https:// e sem barra no fim'
+        required: true
+        default: 'talk-with-me-ng7p.onrender.com'
+      app_id:
+        description: 'Identificador do app (não pode mudar depois de publicado)'
+        required: true
+        default: 'com.talkwithme.app'
+      app_label:
+        description: 'Nome que aparece embaixo do ícone'
+        required: true
+        default: 'Talk with me'
+      version_name:
+        description: 'Versão visível, ex.: 1.0.0'
+        required: true
+        default: '1.0.0'
+      version_code:
+        description: 'Número interno da versão. Precisa AUMENTAR a cada APK novo.'
+        required: true
+        default: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Preparar a chave de assinatura
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/release.keystore"
+
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            # Chave já guardada nos segredos: é ela que mantém o app
+            # atualizável no mesmo aparelho.
+            echo "$KEYSTORE_B64" | base64 -d > "$KS"
+            echo "password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            echo "Usando a chave guardada em ANDROID_KEYSTORE_B64."
+          else
+            # Primeira vez: gera uma chave e devolve junto com o APK, para você
+            # guardá-la nos segredos antes do próximo build.
+            PW="$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)"
+            keytool -genkeypair -v -keystore "$KS" \
+              -alias talkwithme -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$PW" -keypass "$PW" \
+              -dname "CN=${{ github.event.inputs.app_label }}, O=${{ github.event.inputs.app_label }}, C=BR"
+            echo "password=$PW" >> "$GITHUB_OUTPUT"
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Nenhuma chave encontrada nos segredos. Foi gerada uma nova; guarde-a conforme as instruções no resumo desta execução."
+          fi
+          echo "path=$KS" >> "$GITHUB_OUTPUT"
+
+      - name: Compilar o APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ steps.keystore.outputs.password }}
+          ANDROID_KEY_ALIAS: talkwithme
+          ANDROID_KEY_PASSWORD: ${{ steps.keystore.outputs.password }}
+        run: |
+          gradle assembleRelease --no-daemon \
+            -PsiteHost='${{ github.event.inputs.site_host }}' \
+            -PappId='${{ github.event.inputs.app_id }}' \
+            -PappLabel='${{ github.event.inputs.app_label }}' \
+            -PappVersionName='${{ github.event.inputs.version_name }}' \
+            -PappVersionCode='${{ github.event.inputs.version_code }}'
+
+      - name: Ler a impressão digital do certificado
+        id: fingerprint
+        run: |
+          set -euo pipefail
+          # É este valor que precisa ir para o site, senão o Android mantém uma
+          # barra de endereço sobre o app.
+          FP=$(keytool -list -v \
+                -keystore '${{ steps.keystore.outputs.path }}' \
+                -storepass '${{ steps.keystore.outputs.password }}' \
+                -alias talkwithme \
+               | grep -i 'SHA256:' | head -1 | sed 's/.*SHA256: *//' | tr -d ' \r')
+          echo "sha256=$FP" >> "$GITHUB_OUTPUT"
+
+      - name: Renomear o APK
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "out/talk-with-me-${{ github.event.inputs.version_name }}.apk"
+
+      - name: Guardar a chave junto, na primeira vez
+        if: steps.keystore.outputs.generated == 'true'
+        run: cp '${{ steps.keystore.outputs.path }}' out/release.keystore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: out/
+          retention-days: 30
+
+      - name: Escrever as instruções no resumo
+        run: |
+          {
+            echo "## APK pronto"
+            echo
+            echo "Baixe em **Artifacts → apk**, no fim desta página."
+            echo
+            echo "### 1. Ligue o app ao site"
+            echo
+            echo "No painel da hospedagem, defina estas duas variáveis e aguarde o redeploy:"
+            echo
+            echo '```'
+            echo "ANDROID_PACKAGE_NAME = ${{ github.event.inputs.app_id }}"
+            echo "ANDROID_CERT_FINGERPRINT = ${{ steps.fingerprint.outputs.sha256 }}"
+            echo '```'
+            echo
+            echo "Sem isso o app funciona, mas com uma barra de endereço no topo."
+            echo
+            if [ "${{ steps.keystore.outputs.generated }}" = "true" ]; then
+              echo "### 2. Guarde a chave de assinatura — importante"
+              echo
+              echo "Esta execução gerou uma chave nova, incluída no artifact como \`release.keystore\`."
+              echo "**Sem ela você não consegue publicar atualizações do app:** o Android recusa"
+              echo "instalar por cima uma versão assinada com outra chave, e o usuário teria de"
+              echo "desinstalar e perder os dados locais."
+              echo
+              echo "Em **Settings → Secrets and variables → Actions**, crie:"
+              echo
+              echo "- \`ANDROID_KEYSTORE_B64\` — o arquivo em base64: \`base64 -w0 release.keystore\`"
+              echo "- \`ANDROID_KEYSTORE_PASSWORD\` — \`${{ steps.keystore.outputs.password }}\`"
+              echo
+              echo "Guarde também uma cópia do arquivo fora do GitHub. Depois disso, apague"
+              echo "o artifact desta execução: ele contém a chave e a senha."
+            else
+              echo "### 2. Chave"
+              echo
+              echo "Assinado com a chave guardada nos segredos — atualiza por cima da versão anterior."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

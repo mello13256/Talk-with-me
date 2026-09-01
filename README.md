@@ -766,6 +766,62 @@ Vale ser explícito para você decidir com informação:
 
 ---
 
+## 8.1 Aplicativo Android (APK)
+
+O app é uma **casca sobre o próprio site** (Trusted Web Activity): não há uma
+segunda base de código, e o que você publica no site chega ao aparelho sem gerar
+APK novo. O projeto vive em `android/` e não contém uma linha de Java — a
+activity vem da biblioteca oficial do Google.
+
+### O que muda em relação ao site
+
+| | Site no navegador | Aplicativo |
+| --- | --- | --- |
+| Ícone na tela inicial | Só se o usuário fixar | Sim, instalado |
+| Notificação com o app fechado | Sim, se autorizada | Sim |
+| Quem assina a notificação | Chrome, com o ícone do Chrome | O seu app, com o seu ícone |
+| Barra de endereço | Sim | Não, com `assetlinks` configurado |
+
+A terceira linha é a diferença que se nota: o serviço `DelegationService`
+declarado no `AndroidManifest.xml` faz o Chrome delegar a exibição ao app, e a
+notificação aparece como a de um mensageiro comum.
+
+### Gerar o APK
+
+O SDK Android não é necessário na sua máquina — o GitHub compila:
+
+1. **Actions → Aplicativo Android (APK) → Run workflow**, confirmando o domínio.
+2. Ao terminar, baixe em **Artifacts → apk**.
+3. O resumo da execução mostra a impressão digital do certificado. Coloque-a na
+   hospedagem junto com o identificador:
+
+   ```
+   ANDROID_PACKAGE_NAME     = com.talkwithme.app
+   ANDROID_CERT_FINGERPRINT = AB:CD:…
+   ```
+
+   Sem esse par o app abre com uma barra de endereço no topo.
+4. **Na primeira execução, guarde a chave de assinatura** — ela vem junto no
+   artifact. Sem ela não há como publicar atualização: o Android recusa instalar
+   por cima uma versão assinada com outra chave. Salve-a nos segredos
+   (`ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`) e apague o artifact.
+
+### Pré-requisito que costuma passar batido
+
+As notificações dependem das chaves **VAPID** (`VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`). Sem elas o servidor desliga o push inteiro, e o app só
+avisa com a tela aberta — que é justamente o que o aplicativo deveria resolver.
+Gere o par com `npx web-push generate-vapid-keys`.
+
+### Instalar
+
+O APK é distribuído por fora da Play Store, então o aparelho pede autorização
+para "instalar de fonte desconhecida" na primeira vez. Para publicar na Play
+Store é preciso conta de desenvolvedor (taxa única) e um `.aab` em vez de `.apk`
+— troque `assembleRelease` por `bundleRelease` no workflow.
+
+---
+
 ## 9. Checklist de testes
 
 ### Automatizados

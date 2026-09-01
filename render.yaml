@@ -121,10 +121,22 @@ services:
       - key: S3_SECRET_ACCESS_KEY
         sync: false
 
-      # Notificações push do navegador (opcional).
+      # Notificações push do navegador.
+      # OBRIGATÓRIAS para o aplicativo Android notificar: sem elas o servidor
+      # desliga o push por completo e o app só avisa com a tela aberta.
+      # Gere o par com: npx web-push generate-vapid-keys
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
       - key: VAPID_SUBJECT
+        sync: false
+
+      # --- Aplicativo Android (opcional) -----------------------------------
+      # Vincula o APK a este domínio. Sem os dois, o app abre com uma barra de
+      # endereço no topo. A impressão digital sai no resumo da execução do
+      # workflow que gerou o APK.
+      - key: ANDROID_PACKAGE_NAME
+        sync: false
+      - key: ANDROID_CERT_FINGERPRINT
         sync: false
